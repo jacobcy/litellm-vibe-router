@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # ==================================
+  # PostgreSQL for LiteLLM Admin UI
+  # ==================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: litellm-vibe-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=litellm
+      - POSTGRES_USER=litellm
+      - POSTGRES_PASSWORD=litellm_password
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ==================================
+  # LiteLLM Proxy with Intelligent Router
+  # ==================================
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: litellm-vibe-router
+    user: root
+    
+    ports:
+      - "4000:4000"
+    
+    volumes:
+      # Mount final config and router plugin
+      - ./config_final.yaml:/app/config.yaml:ro
+      - ./vibe_router.py:/app/vibe_router.py:ro
+
+      # Optional: mount test script for in-container testing
+      - ./test_route.py:/app/test_route.py:ro
+    
+    environment:
+      # CRITICAL: Python path for plugin import
+      - PYTHONPATH=/app
+
+      # Database connection for Admin UI
+      - DATABASE_URL=postgresql://litellm:litellm_password@postgres:5432/litellm
+
+      # Redis connection
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
+      # Admin UI credentials
+      - UI_USERNAME=admin
+      - UI_PASSWORD=admin123
+
+      # Logging level (INFO, DEBUG, WARNING, ERROR)
+      - LOG_LEVEL=INFO
+
+      # New API configuration
+      - NEW_API_BASE=http://host.docker.internal:3000/v1
+      - NEW_API_KEY=sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+
+      # Anthropic API key for claude models
+      - ANTHROPIC_API_KEY=sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+
+      # Optional: Enable debug mode
+      # - LITELLM_LOG=DEBUG
+    
+    extra_hosts:
+      # Allow container to reach host services (New API on port 3000)
+      - "host.docker.internal:host-gateway"
+    
+    command:
+      - "--config"
+      - "/app/config.yaml"
+      - "--port"
+      - "4000"
+      - "--detailed_debug"
+    
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==================================
+  # Redis for LiteLLM caching
+  # ==================================
+  redis:
+    image: redis:alpine
+    container_name: litellm-vibe-redis
+    
+    ports:
+      - "6379:6379"
+    
+    volumes:
+      - redis_data:/data
+    
+    command: redis-server --appendonly yes
+    
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+# ==================================
+# Volumes
+# ==================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ==================================
+# Networks (optional)
+# ==================================
+networks:
+  default:
+    name: litellm-network

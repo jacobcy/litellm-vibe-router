@@ -1,0 +1,184 @@
+# ==========================================
+# LiteLLM Proxy - Intelligent Virtual Router
+# ==========================================
+#
+# ARCHITECTURE:
+# 1. Virtual models (chat-auto, codex-auto, claude-auto) exist in model_list
+#    → This passes LiteLLM's pre-hook model validation
+# 2. async_pre_call_hook handles simple task routing (complexity-based)
+# 3. LiteLLM router handles rate limit fallback (retry with next model in list)
+#
+# FALLBACK ORDER (chat-auto):
+#   Request → openai/gpt-5 (主模型)
+#          → gpt-5 (限流回落)
+#          → gpt-5-mini (最终兜底)
+#
+# EXECUTION ORDER:
+# Request → Virtual Key Auth → Model Alias Map → async_pre_call_hook (SIMPLE TASK CHECK) → Router (RATE LIMIT FALLBACK) → New API
+# ==========================================
+
+# ==========================================
+# 2. ENVIRONMENT VARIABLES
+# ==========================================
+environment_variables:
+  # 后端统一的 API Key
+  LITELLM_API_KEY: "sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh"
+  OPENAI_API_KEY: "sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh"
+  ANTHROPIC_API_KEY: "sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh"
+
+  NEW_API_BASE: "http://host.docker.internal:3000/v1"
+  NEW_API_KEY: "sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh"
+
+# ==========================================
+# 3. MODEL DEFINITIONS
+# ==========================================
+model_list:
+  # ==================================
+  # VIRTUAL ENTRY POINTS
+  # ==================================
+  # These MUST exist to pass pre-hook validation
+
+  - model_name: chat-auto
+    litellm_params:
+      model: "openai/gpt-5"
+      api_base: http://host.docker.internal:3000/v1
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      custom_llm_provider: "openai"
+
+  - model_name: codex-auto
+    litellm_params:
+      model: "openai/gpt-5.2-codex"
+      api_base: http://host.docker.internal:3000/v1
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      custom_llm_provider: "openai"
+
+  - model_name: claude-auto
+    litellm_params:
+      model: "anthropic/claude-sonnet-4-5"
+      api_base: http://host.docker.internal:3000
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      custom_llm_provider: "anthropic"
+
+  # ==================================
+  # PHYSICAL MODELS - Chat Family
+  # ==================================
+  # 使用相同 model_name 创建 fallback 链
+
+  # chat-auto 的 fallback 链
+  - model_name: chat-auto
+    litellm_params:
+      model: "gpt-5"
+      api_base: http://host.docker.internal:3000/v1
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      custom_llm_provider: "openai"
+    model_info:
+      fallback_order: 2
+      fallback_reason: "rate_limit"
+
+  # ==================================
+  # PHYSICAL MODELS - Codex Family
+  # ==================================
+
+  # codex-auto 的 fallback 链
+  - model_name: codex-auto
+    litellm_params:
+      model: "gpt-5.2-codex"
+      api_base: http://host.docker.internal:3000/v1
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      custom_llm_provider: "openai"
+    model_info:
+      fallback_order: 2
+      fallback_reason: "rate_limit"
+
+  # ==================================
+  # PHYSICAL MODELS - Claude Family
+  # ==================================
+
+  # claude-auto 的 fallback 链
+  - model_name: claude-auto
+    litellm_params:
+      model: "claude-sonnet-4-5"
+      api_base: http://host.docker.internal:3000
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      custom_llm_provider: "anthropic"
+    model_info:
+      fallback_order: 2
+      fallback_reason: "rate_limit"
+
+  # ==================================
+  # CATCH-ALL - 通配符直接透传
+  # ==================================
+  # Anthropic 模型 (claude-* 和 anthropic/*)
+  - model_name: "claude-*"
+    litellm_params:
+      model: "claude-*"  # 保留 claude 前缀
+      api_base: http://host.docker.internal:3000
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      custom_llm_provider: "anthropic"
+
+  - model_name: "anthropic/*"
+    litellm_params:
+      model: "*"  # 保留 anthropic/ 前缀
+      api_base: http://host.docker.internal:3000
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      custom_llm_provider: "anthropic"
+
+  # OpenAI 模型 (其他所有模型）
+  - model_name: "*"
+    litellm_params:
+      model: "*"
+      api_base: http://host.docker.internal:3000/v1
+      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+
+# ==========================================
+# 4. ROUTER SETTINGS
+# ==========================================
+router_settings:
+  # 模型组别名 (用于特殊路由场景)
+  model_group_alias:
+    "chat-auto": "chat-auto"
+    "codex-auto": "codex-auto"
+    "claude-auto": "claude-auto"
+
+  # Routing strategy - simple-shuffle 会按定义顺序尝试模型
+  routing_strategy: "simple-shuffle"
+
+  # Retries and timeout
+  num_retries: 3
+  timeout: 60
+
+  # 失败后 cooldown
+  cooldown_time: 10
+
+# ==========================================
+# 5. GENERAL SETTINGS
+# ==========================================
+general_settings:
+  # Master Key for Admin UI authentication AND API requests
+  # 客户端统一使用这个 key，LiteLLM 自动转发到配置的后端
+  master_key: "sk-litellm-master-key-12345678"
+
+  # Admin UI credentials (can also be set via env vars UI_USERNAME/UI_PASSWORD)
+  ui_username: "admin"
+  ui_password: "admin123"
+
+# ==========================================
+# 6. LITELLM SETTINGS
+# ==========================================
+litellm_settings:
+  # Logging
+  set_verbose: false
+  json_logs: true
+
+  # Drop unsupported params
+  drop_params: true
+
+  # Callbacks (for pre_call_hook)
+  callbacks: ["vibe_router.router_instance"]
+
+  # Success/failure callbacks
+  success_callback: ["vibe_router.router_instance"]
+  failure_callback: ["vibe_router.router_instance"]
+
+  # Request timeout
+  request_timeout: 600
