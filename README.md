@@ -45,11 +45,13 @@ This project implements **intelligent model routing** for LiteLLM Proxy, enablin
 
 ```bash
 chmod +x deploy.sh QUICKSTART.sh
+git submodule update --init --recursive
 ./deploy.sh
 ```
 
 This will:
 - Start LiteLLM proxy, PostgreSQL, and Redis
+- Start CLIProxyAPI for chat-auto isolation (port 8317)
 - Verify plugin loading
 - Check service health
 
@@ -101,6 +103,8 @@ liteLLM/
 ├── vibe_router.py          # Main plugin implementation
 ├── config_final.yaml       # LiteLLM configuration
 ├── docker-compose.yml      # Docker deployment (PostgreSQL, Redis, LiteLLM)
+├── CLIProxyAPI/            # Submodule: CLIProxyAPI service
+├── cliproxyapi.config.yaml # CLIProxyAPI runtime config
 ├── deploy.sh               # Automated deployment script
 ├── test_simple.py          # Simple routing tests
 ├── test_route.py           # Comprehensive test suite
@@ -121,6 +125,11 @@ Three virtual entry points with intelligent routing:
 | `chat-auto`  | gpt-5-mini        | openai/gpt-5         | gpt-5            |
 | `codex-auto` | gpt-5.1-codex-mini| openai/gpt-5.2-codex | gpt-5.2-codex    |
 | `claude-auto`| claude-haiku-4-5  | anthropic/claude-sonnet-4-5 | claude-sonnet-4-5 |
+
+**chat-auto Isolation**
+
+`chat-auto` uses a dedicated API base (CLIProxyAPI on port 8317) with its own key to
+reduce 429 errors and keep traffic isolated.
 
 ### Routing Logic
 
@@ -178,6 +187,12 @@ Authorization: Bearer sk-litellm-master-key-12345678
 Backend API key is configured in `config_final.yaml`:
 ```yaml
 NEW_API_KEY: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+```
+
+chat-auto dedicated API:
+```yaml
+CHAT_AUTO_API_BASE: http://cliproxyapi:8317/v1
+CHAT_AUTO_API_KEY: sk-chat-auto-proxy-12345678
 ```
 
 ## 📊 Monitoring

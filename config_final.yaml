@@ -8,26 +8,36 @@
 # 2. async_pre_call_hook handles simple task routing (complexity-based)
 # 3. LiteLLM router handles rate limit fallback (retry with next model in list)
 #
-# FALLBACK ORDER (chat-auto):
-#   Request → openai/gpt-5 (主模型)
-#          → gpt-5 (限流回落)
-#          → gpt-5-mini (最终兜底)
+# FALLBACK ORDER:
+#   chat-auto   (3层): CLIProxyAPI → New API → Volces Ark API
+#   claude-auto (2层): New API → Volces Ark API
+#   codex-auto  (1层): New API only (Volces 不支持 Codex 接口)
 #
 # EXECUTION ORDER:
-# Request → Virtual Key Auth → Model Alias Map → async_pre_call_hook (SIMPLE TASK CHECK) → Router (RATE LIMIT FALLBACK) → New API
+# Request → Virtual Key Auth → Model Alias Map → async_pre_call_hook (SIMPLE TASK CHECK) → Router (RATE LIMIT FALLBACK) → Backend APIs
 # ==========================================
 
 # ==========================================
 # 2. ENVIRONMENT VARIABLES
 # ==========================================
 environment_variables:
-  # 后端统一的 API Key
-  LITELLM_API_KEY: "sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh"
-  OPENAI_API_KEY: "sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh"
-  ANTHROPIC_API_KEY: "sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh"
+  # 后端统一的 API Key (从 .env 加载)
+  LITELLM_API_KEY: "${NEW_API_KEY}"
+  OPENAI_API_KEY: "${NEW_API_KEY}"
+  ANTHROPIC_API_KEY: "${NEW_API_KEY}"
 
+  # Level 2: New API (第2层降级)
   NEW_API_BASE: "http://host.docker.internal:3000/v1"
-  NEW_API_KEY: "sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh"
+  NEW_API_KEY: "${NEW_API_KEY}"
+
+  # Level 1: CLIProxyAPI (第1层优先)
+  CHAT_AUTO_API_BASE: "http://cliproxyapi:8317/v1"
+  CHAT_AUTO_API_KEY: "${CHAT_AUTO_API_KEY}"
+
+  # Level 3: Volces Ark API (第3层最终降级 - from .env)
+  ARK_API_KEY: "${ARK_API_KEY}"
+  ARK_OPENAI_BASE: "${ARK_OPENAI_BASE}"
+  ARK_CLAUDE_BASE: "${ARK_CLAUDE_BASE}"
 
 # ==========================================
 # 3. MODEL DEFINITIONS
@@ -41,22 +51,31 @@ model_list:
   - model_name: chat-auto
     litellm_params:
       model: "openai/gpt-5"
-      api_base: http://host.docker.internal:3000/v1
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      api_base: http://cliproxyapi:8317/v1
+      api_key: "${CHAT_AUTO_API_KEY}"
       custom_llm_provider: "openai"
 
+  - model_name: chat-auto-mini
+    litellm_params:
+      model: "gpt-5-mini"
+      api_base: http://cliproxyapi:8317/v1
+      api_key: "${CHAT_AUTO_API_KEY}"
+      custom_llm_provider: "openai"
+
+  # codex-auto: 仅转发到 New API (无降级，Volces 不支持 Codex)
   - model_name: codex-auto
     litellm_params:
       model: "openai/gpt-5.2-codex"
       api_base: http://host.docker.internal:3000/v1
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      api_key: "${NEW_API_KEY}"
       custom_llm_provider: "openai"
 
+  # claude-auto: 第1层 New API (会降级到 Volces Ark)
   - model_name: claude-auto
     litellm_params:
       model: "anthropic/claude-sonnet-4-5"
       api_base: http://host.docker.internal:3000
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      api_key: "${NEW_API_KEY}"
       custom_llm_provider: "anthropic"
 
   # ==================================
@@ -64,42 +83,69 @@ model_list:
   # ==================================
   # 使用相同 model_name 创建 fallback 链
 
-  # chat-auto 的 fallback 链
+  # chat-auto 的 fallback 链 (3层降级)
+  # Level 2: New API
   - model_name: chat-auto
     litellm_params:
       model: "gpt-5"
       api_base: http://host.docker.internal:3000/v1
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      api_key: "${NEW_API_KEY}"
       custom_llm_provider: "openai"
     model_info:
       fallback_order: 2
+      fallback_reason: "rate_limit"
+
+  # Level 3: Volces Ark API (最终降级)
+  - model_name: chat-auto
+    litellm_params:
+      model: "openai/glm-4.7"
+      api_base: "${ARK_OPENAI_BASE}"
+      api_key: "${ARK_API_KEY}"
+      custom_llm_provider: "openai"
+    model_info:
+      fallback_order: 3
+      fallback_reason: "rate_limit"
+
+  # chat-auto-mini 的 fallback 链 (3层降级)
+  # Level 2: New API
+  - model_name: chat-auto-mini
+    litellm_params:
+      model: "gpt-5-mini"
+      api_base: http://host.docker.internal:3000/v1
+      api_key: "${NEW_API_KEY}"
+      custom_llm_provider: "openai"
+    model_info:
+      fallback_order: 2
+      fallback_reason: "rate_limit"
+
+  # Level 3: Volces Ark API (最终降级 - mini)
+  - model_name: chat-auto-mini
+    litellm_params:
+      model: "openai/ark-code-latest"
+      api_base: "${ARK_OPENAI_BASE}"
+      api_key: "${ARK_API_KEY}"
+      custom_llm_provider: "openai"
+    model_info:
+      fallback_order: 3
       fallback_reason: "rate_limit"
 
   # ==================================
   # PHYSICAL MODELS - Codex Family
   # ==================================
-
-  # codex-auto 的 fallback 链
-  - model_name: codex-auto
-    litellm_params:
-      model: "gpt-5.2-codex"
-      api_base: http://host.docker.internal:3000/v1
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
-      custom_llm_provider: "openai"
-    model_info:
-      fallback_order: 2
-      fallback_reason: "rate_limit"
+  # codex-auto: 无降级链 (Volces Ark 不支持 Codex 接口)
+  # 仅在虚拟入口定义，无 fallback
 
   # ==================================
   # PHYSICAL MODELS - Claude Family
   # ==================================
 
-  # claude-auto 的 fallback 链
+  # claude-auto 的 fallback 链 (2层降级)
+  # Level 2: Volces Ark API (最终降级)
   - model_name: claude-auto
     litellm_params:
-      model: "claude-sonnet-4-5"
-      api_base: http://host.docker.internal:3000
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      model: "anthropic/glm-4.7"
+      api_base: "${ARK_CLAUDE_BASE}"
+      api_key: "${ARK_API_KEY}"
       custom_llm_provider: "anthropic"
     model_info:
       fallback_order: 2
@@ -156,7 +202,7 @@ router_settings:
 general_settings:
   # Master Key for Admin UI authentication AND API requests
   # 客户端统一使用这个 key，LiteLLM 自动转发到配置的后端
-  master_key: "sk-litellm-master-key-12345678"
+  master_key: "${LITELLM_MASTER_KEY}"
 
   # Admin UI credentials (can also be set via env vars UI_USERNAME/UI_PASSWORD)
   ui_username: "admin"

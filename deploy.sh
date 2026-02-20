@@ -44,10 +44,15 @@ fi
 
 print_success "Docker and Docker Compose are installed"
 
-# Step 2: Check required files
+# Step 2: Initialize submodules
+print_info "Initializing submodules..."
+git submodule update --init --recursive
+print_success "Submodules initialized"
+
+# Step 3: Check required files
 print_info "Checking required files..."
 
-required_files=("config_final.yaml" "vibe_router.py" "docker-compose.yml" "test_route.py")
+required_files=("config_final.yaml" "vibe_router.py" "docker-compose.yml" "test_route.py" "cliproxyapi.config.yaml")
 for file in "${required_files[@]}"; do
     if [ ! -f "$file" ]; then
         print_error "Required file missing: $file"
@@ -55,14 +60,19 @@ for file in "${required_files[@]}"; do
     fi
 done
 
+if [ ! -d "CLIProxyAPI" ]; then
+    print_error "Required directory missing: CLIProxyAPI (submodule)"
+    exit 1
+fi
+
 print_success "All required files present"
 
-# Step 3: Stop existing containers
+# Step 4: Stop existing containers
 print_info "Stopping existing containers..."
 docker-compose down 2>/dev/null || docker compose down 2>/dev/null || true
 print_success "Existing containers stopped"
 
-# Step 4: Start services
+# Step 5: Start services
 print_info "Starting LiteLLM proxy and Redis..."
 if command -v docker-compose &> /dev/null; then
     docker-compose up -d
@@ -72,11 +82,11 @@ fi
 
 print_success "Services started"
 
-# Step 5: Wait for services to be ready
+# Step 6: Wait for services to be ready
 print_info "Waiting for services to initialize (15 seconds)..."
 sleep 15
 
-# Step 6: Check service health
+# Step 7: Check service health
 print_info "Checking service health..."
 
 # Check Redis
@@ -97,7 +107,7 @@ else
     exit 1
 fi
 
-# Step 7: Verify plugin loading
+# Step 8: Verify plugin loading
 print_info "Checking plugin logs..."
 sleep 2
 
@@ -112,13 +122,13 @@ else
     exit 1
 fi
 
-# Step 8: List available models
+# Step 9: List available models
 print_info "Fetching available models..."
 echo ""
-curl -s -H "Authorization: Bearer sk-vibe-master-123" \
+curl -s -H "Authorization: Bearer sk-litellm-master-key-12345678" \
     http://localhost:4000/v1/models | python3 -m json.tool | grep '"id"' || print_error "Failed to fetch models"
 
-# Step 9: Summary
+# Step 10: Summary
 echo ""
 echo "========================================"
 print_success "Deployment Complete!"
@@ -126,6 +136,7 @@ echo "========================================"
 echo ""
 echo "Services:"
 echo "  - LiteLLM Proxy: http://localhost:4000"
+echo "  - CLIProxyAPI: http://localhost:8317"
 echo "  - Redis: localhost:6379"
 echo ""
 echo "Virtual Models:"
@@ -136,8 +147,8 @@ echo ""
 echo "Next Steps:"
 echo "  1. Run tests: python3 test_route.py"
 echo "  2. View logs: docker logs -f litellm-vibe-router"
-echo "  3. Test routing: curl -X POST http://localhost:4000/v1/chat/completions \\"
-echo "                     -H 'Authorization: Bearer sk-vibe-master-123' \\"
+echo "  3. Test routing: curl -X POST http://localhost:4000/v1/chat/completions \\" 
+echo "                     -H 'Authorization: Bearer sk-litellm-master-key-12345678' \\" 
 echo "                     -H 'Content-Type: application/json' \\"
 echo "                     -d '{\"model\": \"chat-auto\", \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}]}'"
 echo ""

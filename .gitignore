@@ -24,3 +24,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Environment Variables (contains sensitive keys)
+.env
+.env.*
+!.env.example

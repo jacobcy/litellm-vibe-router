@@ -2,6 +2,23 @@ version: '3.8'
 
 services:
   # ==================================
+  # CLIProxyAPI (chat-auto dedicated API)
+  # ==================================
+  cliproxyapi:
+    build:
+      context: ./CLIProxyAPI
+    container_name: cli-proxy-api
+
+    ports:
+      - "8317:8317"
+
+    volumes:
+      - ./cliproxyapi.config.yaml:/CLIProxyAPI/config.yaml:ro
+      - cliproxy_auth:/cli-proxy-auth
+
+    restart: unless-stopped
+
+  # ==================================
   # PostgreSQL for LiteLLM Admin UI
   # ==================================
   postgres:
@@ -17,7 +34,7 @@ services:
       - POSTGRES_PASSWORD=litellm_password
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U litellm"]
+      test: [ "CMD-SHELL", "pg_isready -U litellm" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -29,10 +46,14 @@ services:
     image: ghcr.io/berriai/litellm:main-stable
     container_name: litellm-vibe-router
     user: root
-    
+
+    # Load environment variables from .env file
+    env_file:
+      - .env
+
     ports:
       - "4000:4000"
-    
+
     volumes:
       # Mount final config and router plugin
       - ./config_final.yaml:/app/config.yaml:ro
@@ -40,7 +61,7 @@ services:
 
       # Optional: mount test script for in-container testing
       - ./test_route.py:/app/test_route.py:ro
-    
+
     environment:
       # CRITICAL: Python path for plugin import
       - PYTHONPATH=/app
@@ -59,43 +80,55 @@ services:
       # Logging level (INFO, DEBUG, WARNING, ERROR)
       - LOG_LEVEL=INFO
 
-      # New API configuration
+      # Level 2: New API configuration
       - NEW_API_BASE=http://host.docker.internal:3000/v1
-      - NEW_API_KEY=sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      - NEW_API_KEY=${NEW_API_KEY}
 
-      # Anthropic API key for claude models
-      - ANTHROPIC_API_KEY=sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      # Level 1: CLIProxyAPI configuration
+      - CHAT_AUTO_API_KEY=${CHAT_AUTO_API_KEY}
 
+      # Level 3: Volces Ark API (from .env)
+      - ARK_API_KEY=${ARK_API_KEY}
+      - ARK_OPENAI_BASE=${ARK_OPENAI_BASE}
+      - ARK_CLAUDE_BASE=${ARK_CLAUDE_BASE}
+
+      # LiteLLM Master Key (from .env)
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+
+      # Anthropic API key for claude models (from .env)
+      - ANTHROPIC_API_KEY=${NEW_API_KEY}
       # Optional: Enable debug mode
       # - LITELLM_LOG=DEBUG
-    
+
     extra_hosts:
       # Allow container to reach host services (New API on port 3000)
       - "host.docker.internal:host-gateway"
-    
+
     command:
       - "--config"
       - "/app/config.yaml"
       - "--port"
       - "4000"
       - "--detailed_debug"
-    
+
     depends_on:
       redis:
         condition: service_started
       postgres:
         condition: service_healthy
-    
+      cliproxyapi:
+        condition: service_started
+
     restart: unless-stopped
-    
+
     # Health check
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:4000/health || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:4000/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
-    
+
     # Resource limits (optional)
     deploy:
       resources:
@@ -112,20 +145,20 @@ services:
   redis:
     image: redis:alpine
     container_name: litellm-vibe-redis
-    
+
     ports:
       - "6379:6379"
-    
+
     volumes:
       - redis_data:/data
-    
+
     command: redis-server --appendonly yes
-    
+
     restart: unless-stopped
-    
+
     # Health check
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -134,6 +167,8 @@ services:
 # Volumes
 # ==================================
 volumes:
+  cliproxy_auth:
+    driver: local
   postgres_data:
     driver: local
   redis_data:

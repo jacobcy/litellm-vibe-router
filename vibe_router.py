@@ -9,7 +9,7 @@ LiteLLM Intelligent Router Plugin
 3. 限流/失败: LiteLLM router 自动 fallback 到下一级模型
 
 Fallback 链 (chat-auto 为例):
-   openai/gpt-5 (主模型) → gpt-5 (限流回落) → gpt-5-mini (最终兜底)
+    openai/gpt-5 (主模型) → gpt-5 (限流回落)
 """
 
 import sys
@@ -48,7 +48,7 @@ class VibeIntelligentRouter(CustomLogger):
 
     # 简单任务直接路由的目标模型
     SIMPLE_TASK_TARGETS = {
-        "chat-auto": "gpt-5-mini",
+        "chat-auto": "chat-auto-mini",
         "codex-auto": "gpt-5.1-codex-mini",
         "claude-auto": "claude-haiku-4-5"
     }

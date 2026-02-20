@@ -9,6 +9,8 @@
 | `vibe_router.py` | Main plugin implementing intelligent routing logic | ✅ Complete |
 | `config_final.yaml` | LiteLLM configuration with virtual & physical models | ✅ Complete |
 | `docker-compose.yml` | Docker deployment with LiteLLM + Redis | ✅ Complete |
+| `CLIProxyAPI/` | Submodule: CLIProxyAPI service for chat-auto isolation | ✅ Complete |
+| `cliproxyapi.config.yaml` | CLIProxyAPI config (dedicated chat-auto key) | ✅ Complete |
 | `test_route.py` | Comprehensive test suite for routing verification | ✅ Complete |
 | `deploy.sh` | Automated deployment script | ✅ Complete |
 | `verify.py` | Quick health check without API calls | ✅ Complete |
