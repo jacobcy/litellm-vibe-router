@@ -31,8 +31,13 @@ claude-auto (2 layers): New API → Volces Ark
 ./deploy.sh                           # Auto-deploy all services
 docker-compose restart litellm        # Restart after config changes
 
-# Testing
-python3 test_route.py                 # Comprehensive tests
+# Testing (reads from .env)
+python3 tests/test_simple.py          # Quick routing test
+python3 tests/test_route.py           # Comprehensive tests
+python3 tests/test_remote.py          # Remote server tests
+python3 tests/test_remote.py --url http://server:4000 --key sk-xxx  # Custom args
+
+# Manual test
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
   -d '{"model": "chat-auto", "messages": [{"role": "user", "content": "hi"}]}'
@@ -42,7 +47,8 @@ docker logs -f litellm-vibe-router 2>&1 | grep VIBE-ROUTER
 docker logs litellm-vibe-router 2>&1 | grep "SIMPLE\|COMPLEX"
 ```
 
-**Admin UI**: `http://localhost:4000/ui/` (admin / from .env)
+**Admin UI**: `http://localhost:4000/ui/` (admin / from .env)  
+**Test Config**: Copy [tests/.env.example](tests/.env.example) to `.env` for test credentials
 
 ---
 

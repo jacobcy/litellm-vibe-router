@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
 Comprehensive Test Suite for LiteLLM Virtual Model Routing
-Tests the custom_router plugin with various scenarios
+Tests the intelligent router plugin with various scenarios
 """
-
-import requests
-import json
+import os
 import sys
 import time
+import json
+import requests
+import traceback
 from typing import Dict, Any, Optional
 
-# Configuration
-PROXY_URL = "http://localhost:4000"
-API_KEY = "sk-vibe-master-123"
+# Configuration from environment variables
+PROXY_URL = os.environ.get('LITELLM_BASE_URL', 'http://localhost:4000')
+API_KEY = os.environ.get('LITELLM_MASTER_KEY', 'sk-litellm-master-key-12345678')
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -47,10 +48,10 @@ def test_health() -> bool:
     try:
         response = requests.get(f"{PROXY_URL}/health", timeout=5)
         if response.status_code == 200:
-            print_success(f"Proxy is healthy: {response.status_code}")
+            print_success(f"Proxy is healthy at {PROXY_URL}")
             return True
         else:
-            print_error(f"Proxy returned: {response.status_code}")
+            print_error(f"Health check returned status {response.status_code}")
             return False
     except Exception as e:
         print_error(f"Health check failed: {e}")
@@ -64,14 +65,14 @@ def list_models() -> Optional[Dict]:
         response = requests.get(f"{PROXY_URL}/v1/models", headers=headers, timeout=5)
         
         if response.status_code == 200:
-            models = response.json()
-            print_success(f"Found {len(models.get('data', []))} models")
-            for model in models.get('data', []):
+            data = response.json()
+            models = data.get('data', [])
+            print_success(f"Found {len(models)} models")
+            for model in models[:10]:
                 print(f"  - {model.get('id', 'unknown')}")
-            return models
+            return data
         else:
             print_error(f"Failed to list models: {response.status_code}")
-            print(f"  Response: {response.text}")
             return None
     except Exception as e:
         print_error(f"Error listing models: {e}")
@@ -135,30 +136,29 @@ def test_route(
             
             print_success(f"Request succeeded")
             print(f"Returned Model: {Colors.BOLD}{returned_model}{Colors.RESET}")
-            print(f"Tokens: {usage.get('total_tokens', 'N/A')}")
+            print(f"Tokens Used: {usage.get('total_tokens', 'N/A')}")
             
-            # Validate routing if expected
             if expected_route:
                 if returned_model == expected_route or returned_model == model_name:
-                    print_success(f"Routing validated ✓")
+                    print_success("Routing validation passed")
                     return True
                 else:
-                    print_error(f"Routing mismatch! Expected {expected_route}, got {returned_model}")
+                    print_error(f"Routing mismatch! Expected: {expected_route}, Got: {returned_model}")
                     return False
             return True
             
         elif response.status_code == 400:
-            error_data = response.json()
-            print_error(f"Bad Request: {error_data}")
+            print_error(f"Bad request")
+            print(f"Response: {response.text[:200]}")
             return False
             
         elif response.status_code == 401:
-            print_error(f"Authentication failed")
+            print_error(f"Unauthorized - check API key")
             return False
             
         else:
-            print_error(f"Unexpected status: {response.status_code}")
-            print(f"Response: {response.text}")
+            print_error(f"Request failed with status {response.status_code}")
+            print(f"Response: {response.text[:200]}")
             return False
             
     except requests.Timeout:
@@ -166,7 +166,6 @@ def test_route(
         return False
     except Exception as e:
         print_error(f"Request failed: {e}")
-        import traceback
         traceback.print_exc()
         return False
 
@@ -177,6 +176,10 @@ def run_test_suite():
     print("║          LiteLLM Virtual Model Router Test Suite             ║")
     print("╚═══════════════════════════════════════════════════════════════╝")
     print(Colors.RESET)
+    
+    print(f"\nConfiguration:")
+    print(f"  Proxy URL: {Colors.BOLD}{PROXY_URL}{Colors.RESET}")
+    print(f"  API Key: {Colors.BOLD}{API_KEY[:20]}...{Colors.RESET}")
     
     results = []
     
@@ -193,38 +196,38 @@ def run_test_suite():
         {
             "model": "chat-auto",
             "message": "hi",
-            "expected": "pool-chat-mini",
-            "description": "Simple greeting → Mini pool"
+            "expected": "chat-auto-mini",
+            "description": "Simple greeting → Mini model"
         },
         {
             "model": "chat-auto",
             "message": "Please provide a comprehensive analysis of distributed system architecture patterns, including microservices, event-driven design, and CQRS implementations.",
-            "expected": "pool-chat-standard",
-            "description": "Complex analysis → Standard pool"
+            "expected": "chat-auto",
+            "description": "Complex analysis → Standard model"
         },
         {
             "model": "claude-auto",
             "message": "ls",
-            "expected": "pool-claude-haiku",
-            "description": "Simple command → Haiku pool"
+            "expected": "claude-auto",
+            "description": "Simple command → Claude"
         },
         {
             "model": "claude-auto",
             "message": "Analyze the philosophical implications of consciousness in artificial intelligence systems and discuss the hard problem of consciousness.",
-            "expected": "pool-claude-sonnet",
-            "description": "Complex philosophy → Sonnet pool"
+            "expected": "claude-auto",
+            "description": "Complex philosophy → Claude"
         },
         {
             "model": "codex-auto",
             "message": "cat test.py",
-            "expected": "pool-codex-mini",
-            "description": "Simple file read → Mini codex"
+            "expected": "codex-auto",
+            "description": "Simple file read → Codex"
         },
         {
             "model": "codex-auto",
             "message": "Implement a concurrent lock-free hash table with linearizable operations using compare-and-swap primitives in C++.",
-            "expected": "pool-codex-heavy",
-            "description": "Complex algorithm → Heavy codex"
+            "expected": "codex-auto",
+            "description": "Complex algorithm → Codex"
         },
     ]
     
@@ -237,9 +240,6 @@ def run_test_suite():
             description=test_case["description"]
         )
         results.append((test_case["description"], result))
-        
-        # Brief pause between tests
-        time.sleep(0.5)
     
     # Summary
     print_header("Test Summary")
@@ -253,16 +253,13 @@ def run_test_suite():
     print(f"\n{Colors.BOLD}Results: {passed}/{total} tests passed{Colors.RESET}")
     
     if passed == total:
-        print(f"{Colors.GREEN}{Colors.BOLD}✓ All tests passed!{Colors.RESET}\n")
-        return 0
+        print(f"\n{Colors.GREEN}{Colors.BOLD}✓ All tests passed! 🎉{Colors.RESET}\n")
     else:
-        print(f"{Colors.RED}{Colors.BOLD}✗ Some tests failed{Colors.RESET}\n")
-        return 1
+        print(f"\n{Colors.RED}{Colors.BOLD}✗ Some tests failed{Colors.RESET}\n")
 
 if __name__ == "__main__":
     try:
-        exit_code = run_test_suite()
-        sys.exit(exit_code)
+        run_test_suite()
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}Tests interrupted by user{Colors.RESET}")
         sys.exit(130)

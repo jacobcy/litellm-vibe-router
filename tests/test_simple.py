@@ -2,15 +2,20 @@
 """
 Simple test to verify LiteLLM proxy routing
 """
+import os
 import requests
 import json
 import sys
 
-def test_route(model_name, message_content):
+def test_route(model_name, message_content, api_key=None, base_url=None):
     """Test routing for a specific model"""
-    url = "http://localhost:4000/v1/chat/completions"
+    # Get configuration from environment variables
+    api_key = api_key or os.environ.get('LITELLM_MASTER_KEY', 'sk-litellm-master-key-12345678')
+    base_url = base_url or os.environ.get('LITELLM_BASE_URL', 'http://localhost:4000')
+    
+    url = f"{base_url}/v1/chat/completions"
     headers = {
-        "Authorization": "Bearer sk-vibe-master-123",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     

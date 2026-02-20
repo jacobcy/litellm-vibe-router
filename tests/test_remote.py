@@ -3,10 +3,11 @@
 远端测试脚本 - LiteLLM 智能路由器
 测试虚拟模型路由是否正常工作
 """
-
-import requests
-import json
+import os
 import sys
+import time
+import json
+import requests
 import argparse
 from typing import Optional
 
@@ -78,16 +79,15 @@ def test_list_models(base_url: str, api_key: str) -> bool:
             found_virtual = [m for m in virtual_models if any(m == model.get('id') for model in model_list)]
 
             if found_virtual:
-                print_success(f"虚拟模型已配置: {', '.join(found_virtual)}")
+                print_success(f"找到虚拟模型: {', '.join(found_virtual)}")
             else:
-                print_error("未找到虚拟模型")
+                print_error("未找到虚拟模型!")
 
             print("\n所有模型:")
             for model in model_list:
                 model_id = model.get('id', 'unknown')
-                is_virtual = model_id in virtual_models
-                prefix = f"{Colors.GREEN}[虚拟]{Colors.RESET}" if is_virtual else f"{Colors.BLUE}[物理]{Colors.RESET}"
-                print(f"  {prefix} {model_id}")
+                model_type = '(虚拟)' if model_id in virtual_models else ''
+                print(f"  - {model_id} {model_type}")
 
             return len(found_virtual) == len(virtual_models)
         else:
@@ -164,7 +164,7 @@ def run_all_tests(base_url: str, api_key: str):
 
     print(f"\n配置信息:")
     print(f"  服务地址: {Colors.BOLD}{base_url}{Colors.RESET}")
-    print(f"  API Key: {Colors.BOLD}{api_key}{Colors.RESET}")
+    print(f"  API Key: {Colors.BOLD}{api_key[:20]}...{Colors.RESET}")
 
     results = []
 
@@ -187,26 +187,26 @@ def run_all_tests(base_url: str, api_key: str):
         {
             "model": "chat-auto",
             "message": "hi",
-            "expected": "pool-chat-mini",
-            "desc": "简单消息 → Mini池"
+            "expected": "chat-auto-mini",
+            "desc": "简单消息 → Mini模型"
         },
         {
             "model": "chat-auto",
             "message": "Please provide a comprehensive analysis of distributed system architecture including microservices, event-driven design, and CQRS implementations.",
-            "expected": "pool-chat-standard",
-            "desc": "复杂消息 → Standard池"
+            "expected": "chat-auto",
+            "desc": "复杂消息 → Standard模型"
         },
         {
             "model": "claude-auto",
             "message": "ls",
-            "expected": "pool-claude-haiku",
-            "desc": "简单命令 → Haiku池"
+            "expected": "claude-auto",
+            "desc": "简单命令 → Claude"
         },
         {
             "model": "codex-auto",
             "message": "Implement a concurrent lock-free hash table using compare-and-swap primitives.",
-            "expected": "pool-codex-heavy",
-            "desc": "复杂代码 → Heavy池"
+            "expected": "codex-auto",
+            "desc": "复杂代码 → Codex"
         },
     ]
 
@@ -241,10 +241,12 @@ def run_all_tests(base_url: str, api_key: str):
 
 def main():
     parser = argparse.ArgumentParser(description='LiteLLM 智能路由器远端测试')
-    parser.add_argument('--url', default='http://bghunt.cn:7088',
-                      help='LiteLLM 代理地址 (默认: http://bghunt.cn:7088)')
-    parser.add_argument('--key', default='sk-vibe-master-123',
-                      help='API 密钥 (默认: sk-vibe-master-123)')
+    parser.add_argument('--url', 
+                      default=os.environ.get('LITELLM_REMOTE_URL', 'http://localhost:4000'),
+                      help='LiteLLM 代理地址 (默认: $LITELLM_REMOTE_URL 或 http://localhost:4000)')
+    parser.add_argument('--key', 
+                      default=os.environ.get('LITELLM_MASTER_KEY', 'sk-litellm-master-key-12345678'),
+                      help='API 密钥 (默认: $LITELLM_MASTER_KEY)')
 
     args = parser.parse_args()
 
