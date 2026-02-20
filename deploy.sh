@@ -52,7 +52,7 @@ print_success "Submodules initialized"
 # Step 3: Check required files
 print_info "Checking required files..."
 
-required_files=("config_final.yaml" "vibe_router.py" "docker-compose.yml" "test_route.py" "cliproxyapi.template.yaml")
+required_files=("config_final.yaml" "vibe_router.py" "docker-compose.yml" "cliproxyapi.template.yaml")
 for file in "${required_files[@]}"; do
     if [ ! -f "$file" ]; then
         print_error "Required file missing: $file"
@@ -200,7 +200,7 @@ echo "  - auto-codex  (routes to pool-codex-mini or pool-codex-heavy)"
 echo "  - auto-claude (routes to pool-claude-haiku or pool-claude-sonnet)"
 echo ""
 echo "Next Steps:"
-echo "  1. Run tests: python3 test_route.py"
+echo "  1. Run tests: ./test.sh"
 echo "  2. View logs: docker logs -f litellm-vibe-router"
 echo "  3. Test routing: curl -X POST http://localhost:4000/v1/chat/completions \\" 
 echo "                     -H 'Authorization: Bearer ${LITELLM_MASTER_KEY}' \\" 
