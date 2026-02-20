@@ -42,14 +42,14 @@ def test_route(model_name, message_content, api_key=None, base_url=None):
         return None
 
 if __name__ == "__main__":
-    # Test 1: Simple message to chat-auto (should route to mini)
-    test_route("chat-auto", "hi")
+    # Test 1: Simple message to auto-chat (should route to mini)
+    test_route("auto-chat", "hi")
     
-    # Test 2: Complex message to chat-auto (should route to standard)
-    test_route("chat-auto", "Please analyze the architectural patterns in this complex distributed system")
+    # Test 2: Complex message to auto-chat (should route to standard)
+    test_route("auto-chat", "Please analyze the architectural patterns in this complex distributed system")
     
-    # Test 3: Simple message to claude-auto
-    test_route("claude-auto", "ls")
+    # Test 3: Simple message to auto-claude
+    test_route("auto-claude", "ls")
     
-    # Test 4: Complex message to codex-auto
-    test_route("codex-auto", "Implement a recursive backtracking algorithm for solving N-Queens problem")
+    # Test 4: Complex message to auto-codex
+    test_route("auto-codex", "Implement a recursive backtracking algorithm for solving N-Queens problem")

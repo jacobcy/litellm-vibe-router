@@ -1,0 +1,2 @@
+# Test Dependencies for LiteLLM Router
+requests>=2.31.0

@@ -46,7 +46,8 @@ def test_health() -> bool:
     """Test if proxy is healthy"""
     print_header("Health Check")
     try:
-        response = requests.get(f"{PROXY_URL}/health", timeout=5)
+        headers = {"Authorization": f"Bearer {API_KEY}"}
+        response = requests.get(f"{PROXY_URL}/health", headers=headers, timeout=15)
         if response.status_code == 200:
             print_success(f"Proxy is healthy at {PROXY_URL}")
             return True
@@ -194,40 +195,40 @@ def run_test_suite():
     # Test 3-8: Routing scenarios
     test_cases = [
         {
-            "model": "chat-auto",
+            "model": "auto-chat",
             "message": "hi",
-            "expected": "chat-auto-mini",
-            "description": "Simple greeting → Mini model"
+            "expected": "auto-chat",
+            "description": "auto-chat: Simple greeting"
         },
         {
-            "model": "chat-auto",
-            "message": "Please provide a comprehensive analysis of distributed system architecture patterns, including microservices, event-driven design, and CQRS implementations.",
-            "expected": "chat-auto",
-            "description": "Complex analysis → Standard model"
+            "model": "auto-chat-mini",
+            "message": "What is 2+2?",
+            "expected": "auto-chat-mini",
+            "description": "auto-chat-mini: Simple math"
         },
         {
-            "model": "claude-auto",
-            "message": "ls",
-            "expected": "claude-auto",
-            "description": "Simple command → Claude"
+            "model": "auto-claude",
+            "message": "Explain quantum computing",
+            "expected": "auto-claude",
+            "description": "auto-claude: Complex explanation"
         },
         {
-            "model": "claude-auto",
-            "message": "Analyze the philosophical implications of consciousness in artificial intelligence systems and discuss the hard problem of consciousness.",
-            "expected": "claude-auto",
-            "description": "Complex philosophy → Claude"
+            "model": "auto-claude-mini",
+            "message": "Say hello",
+            "expected": "auto-claude-mini",
+            "description": "auto-claude-mini: Simple task"
         },
         {
-            "model": "codex-auto",
-            "message": "cat test.py",
-            "expected": "codex-auto",
-            "description": "Simple file read → Codex"
+            "model": "auto-codex",
+            "message": "Write a Python function to reverse a string",
+            "expected": "auto-codex",
+            "description": "auto-codex: Code generation"
         },
         {
-            "model": "codex-auto",
-            "message": "Implement a concurrent lock-free hash table with linearizable operations using compare-and-swap primitives in C++.",
-            "expected": "codex-auto",
-            "description": "Complex algorithm → Codex"
+            "model": "auto-codex-mini",
+            "message": "Print hello world in Python",
+            "expected": "auto-codex-mini",
+            "description": "auto-codex-mini: Simple code"
         },
     ]
     
