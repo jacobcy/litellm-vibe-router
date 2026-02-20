@@ -1,208 +1,164 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Project documentation for LiteLLM Intelligent Router with 3-tier fallback strategy.
 
 ---
 
 ## Project Overview
 
-This is a LiteLLM Proxy with an intelligent routing plugin (`vibe_router.py`) that automatically selects the optimal AI model based on query complexity. Users send requests to virtual models (`chat-auto`, `codex-auto`, `claude-auto`), and the system routes to appropriate physical models with automatic rate limit fallback.
+**Architecture**: LiteLLM Proxy + Intelligent Router Plugin + 3-Layer Fallback  
+**Tech Stack**: Python 3.9+, Docker, LiteLLM Proxy, Redis, PostgreSQL  
+**Core Feature**: Virtual models auto-route based on complexity (< 50 = simple, ≥ 50 = complex)
+
+### 3-Layer Fallback Strategy
+
+```
+chat-auto (3 layers):
+  L1: CLIProxyAPI (Antigravity OAuth) → claude-sonnet-4-6 / gemini-2.5-flash
+  L2: New API (自建转发) → gpt-5 / gpt-5-mini (模型转换)
+  L3: Volces Ark (商业付费) → glm-4.7 / ark-code-latest
+
+codex-auto (1 layer): New API only
+claude-auto (2 layers): New API → Volces Ark
+```
 
 ---
 
-## Common Commands
+## Quick Commands
 
-### Deployment
 ```bash
-# Deploy all services (LiteLLM, PostgreSQL, Redis)
-./deploy.sh
+# Deployment
+./deploy.sh                           # Auto-deploy all services
+docker-compose restart litellm        # Restart after config changes
 
-# Or use docker-compose directly
-docker-compose up -d
-
-# Stop all services
-docker-compose down
-
-# Restart LiteLLM only (after config changes)
-docker-compose restart litellm
-```
-
-### Testing
-```bash
-# Run simple routing tests
-python3 test_simple.py
-
-# Run comprehensive test suite
-python3 test_route.py
-
-# Test specific scenario manually
+# Testing
+python3 test_route.py                 # Comprehensive tests
 curl -X POST http://localhost:4000/v1/chat/completions \
-  -H "Authorization: Bearer sk-litellm-master-key-12345678" \
-  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
   -d '{"model": "chat-auto", "messages": [{"role": "user", "content": "hi"}]}'
-```
 
-### Monitoring
-```bash
-# View all logs
-docker logs -f litellm-vibe-router
-
-# View plugin routing decisions only
-docker logs litellm-vibe-router 2>&1 | grep VIBE-ROUTER
-
-# Check simple/complex routing
+# Monitoring
+docker logs -f litellm-vibe-router 2>&1 | grep VIBE-ROUTER
 docker logs litellm-vibe-router 2>&1 | grep "SIMPLE\|COMPLEX"
-
-# Check service health
-curl http://localhost:4000/health
 ```
 
-### Admin UI
-- URL: `http://localhost:4000/ui/`
-- Username: `admin`
-- Password: `admin123`
+**Admin UI**: `http://localhost:4000/ui/` (admin / from .env)
 
 ---
 
-## Architecture
-
-### Request Flow
+## Request Flow
 
 ```
-Client Request → LiteLLM Proxy (port 4000)
-    ↓
-Master Key Validation (sk-litellm-master-key-12345678)
-    ↓
-async_pre_call_hook (vibe_router.py)
-    ├─ Analyze message complexity (score 0-∞)
-    ├─ If score < 50: Rewrite model to lightweight (e.g., gpt-5-mini)
-    └─ If score >= 50: Keep model as-is for fallback chain
-    ↓
-Router Model Resolution (pattern matching)
-    ↓
-Rate Limit Fallback (if needed)
-    ├─ Try primary model (e.g., openai/gpt-5)
-    └─ If rate limited: Try fallback model (e.g., gpt-5)
-    ↓
-LiteLLM API Call → New API (localhost:3000) → Actual LLM
+Client → LiteLLM (4000) → async_pre_call_hook (complexity check)
+  ├─ Simple (<50): Rewrite to lightweight model (gemini-2.5-flash)
+  └─ Complex (≥50): Keep original for fallback chain
+    → Router → L1: CLIProxyAPI (OAuth) → L2: New API → L3: Ark API
 ```
-
-### Virtual Models and Routing
-
-| Virtual Model | Simple Route (<50) | Complex Route (>=50) | Fallback |
-|--------------|-------------------|---------------------|----------|
-| `chat-auto`  | gpt-5-mini        | openai/gpt-5         | gpt-5    |
-| `codex-auto` | gpt-5.1-codex-mini| openai/gpt-5.2-codex | gpt-5.2-codex |
-| `claude-auto`| claude-haiku-4-5  | anthropic/claude-sonnet-4-5 | claude-sonnet-4-5 |
-
-### Wildcard Passthrough
-
-Any model can be requested directly:
-
-| Pattern      | Provider  | API Base                           |
-|--------------|-----------|-----------------------------------|
-| `claude-*`   | anthropic| `http://host.docker.internal:3000` |
-| `anthropic/*`| anthropic| `http://host.docker.internal:3000` |
-| `*`          | openai    | `http://host.docker.internal:3000/v1` |
-
-Note: Anthropic models use `/v1` endpoint, OpenAI uses `/v1` path.
-
-### Key Files
-
-- `vibe_router.py` - Plugin implementing `VibeIntelligentRouter(CustomLogger)`
-  - `SIMPLE_TASK_TARGETS`: Maps virtual models to lightweight models
-  - `_calculate_complexity()`: Scores messages based on length, keywords, code blocks
-  - `async_pre_call_hook()`: Rewrites model for simple queries, must return modified `data`
-
-- `config_final.yaml` - LiteLLM configuration
-  - `model_list`: Defines virtual models + fallback chains (2 layers)
-  - `environment_variables`: API keys and backend URLs
-  - `litellm_settings.callbacks`: Must include `vibe_router.router_instance`
-
-- `docker-compose.yml` - Service orchestration
-  - `postgres`: Database for Admin UI
-  - `redis`: Caching for LiteLLM
-  - `litellm`: Main proxy with plugin mounted at `/app/vibe_router.py`
-
----
-
-## Configuration Details
-
-### Backend API Keys
-
-All backend calls use the same key (configured in `config_final.yaml`):
-```
-sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
-```
-
-### Client Authentication
-
-- **API requests**: Use `sk-litellm-master-key-12345678` as Bearer token
-- **Admin UI**: Login with `admin` / `admin123`
 
 ### Complexity Scoring
 
-The plugin calculates complexity based on:
-
-1. **Message length**: Longer = higher score (max +200)
-2. **Simple keywords**: `ls`, `cat`, `hi`, `test` → -100 each
-3. **Complex keywords**: `implement`, `algorithm`, `design` → +150 each
-4. **Code blocks**: ` ``` ` or `def ` → +100
-5. **Sentence count**: >2 sentences → +50
-6. **Conversation history**: >5 messages → +30
-
-Threshold: Score < 50 = Simple, Score ≥ 50 = Complex
-
-To adjust: Edit `COMPLEXITY_THRESHOLD` in `vibe_router.py:175`
+- Message length (max +200), Simple words (-100), Complex words (+150)
+- Code blocks (+100), Sentences >2 (+50), History >5 (+30)
+- **Threshold**: `COMPLEXITY_THRESHOLD = 50` in [vibe_router.py](vibe_router.py#L175)
 
 ---
 
-## Development Notes
+## Key Files
 
-### Adding a New Virtual Model
+**[vibe_router.py](vibe_router.py)** - Intelligent router plugin
+- `SIMPLE_TASK_TARGETS = {"chat-auto": "chat-auto-mini", ...}` (L49-51)
+- `async_pre_call_hook()` - **MUST return modified `data`** (L127-218)
 
-1. Add to `SIMPLE_TASK_TARGETS` in `vibe_router.py`
-2. Add virtual entry point + fallback chain to `model_list` in `config_final.yaml`
-3. Add simple/complex keywords to `simple_indicators` / `complex_indicators` if needed
-4. Restart LiteLLM: `docker-compose restart litellm`
+**[config_final.yaml](config_final.yaml)** - LiteLLM configuration
+- `model_list`: Virtual models + fallback chains with `fallback_order`
+- ⚠️ Use `os.environ/VAR` not `${VAR}` for API keys
+- ⚠️ Must add callbacks in BOTH `general_settings` AND `litellm_settings`
 
-### Fallback Chain Configuration
+**[docker-compose.yml](docker-compose.yml)** - Services orchestration
+- Environment: `PYTHONPATH=/app` + `env_file: .env`
+- Volumes: Plugin mounted at `/app/vibe_router.py:ro`
 
-Each virtual model requires 2 fallback layers in `config_final.yaml`:
+**[.env](/.env)** - Secrets (gitignored)
+- `LITELLM_MASTER_KEY`, `UI_USERNAME`, `UI_PASSWORD`
+- `CHAT_AUTO_API_KEY` (CLIProxyAPI), `NEW_API_KEY`, `ARK_API_KEY`
+
+---
+
+## Code Style & Configuration
+
+### Python Essentials
+- **Type hints**: `def func(x: str) -> bool:`
+- **Error handling**: Log errors, return fallback (never `except: pass`)
+- **Async hooks**: Must return modified `data` dict
+
+### Critical Patterns
+```python
+# LiteLLM Hook (MUST return data)
+async def async_pre_call_hook(self, ..., data: Dict, ...) -> Optional[Dict]:
+    data["model"] = target_model
+    return data  # ← Required, or model becomes None
+```
+
 ```yaml
-- model_name: chat-auto          # Layer 1: Primary
-  litellm_params:
-    model: "openai/gpt-5"
+# Environment Variables (use os.environ/ syntax)
+api_key: os.environ/NEW_API_KEY  # ✅ Correct
+api_key: "${NEW_API_KEY}"       # ❌ Won't expand
 
-- model_name: chat-auto          # Layer 2: Rate limit fallback
+# Callback Registration (BOTH required)
+general_settings:
+  callbacks: [vibe_router.router_instance]
+litellm_settings:
+  callbacks: [vibe_router.router_instance]
+```
+
+### Virtual Model Configuration
+```yaml
+# L1: Use actual backend model
+- model_name: chat-auto
+  litellm_params:
+    model: "claude-sonnet-4-6"  # Antigravity model
+    api_key: os.environ/CHAT_AUTO_API_KEY
+
+# L2-L3: Same model_name with fallback_order
+- model_name: chat-auto
   litellm_params:
     model: "gpt-5"
   model_info:
     fallback_order: 2
-    fallback_reason: "rate_limit"
 ```
 
-Note: The 3rd layer (final fallback) was removed because simple queries are already routed directly by the plugin, bypassing the fallback chain.
+---
 
-### Plugin Hook Critical Path
+## Troubleshooting
 
-The `async_pre_call_hook` MUST return the modified `data` object:
+| Issue | Symptom | Fix |
+|-------|---------|-----|
+| **Hook Not Executing** | Plugin loads but no routing | Add `callbacks: [vibe_router.router_instance]` to `litellm_settings` |
+| **Env Vars Not Expanding** | API calls fail with `"${VAR}"` | Use `os.environ/VAR` not `${VAR}` |
+| **Model Not Found** | 429/404 from CLIProxyAPI | Use actual backend models (e.g., `gemini-2.5-flash`) |
+| **Pydantic Validation** | `model_info.tier` error | Only use `"free"`/`"paid"` or remove tier |
 
-```python
-data["model"] = target_model  # Rewrite the model
-return data  # ← CRITICAL: Without this, changes are lost
-```
+---
 
-### Environment Variables for Containers
+## Development
 
-The plugin is mounted into the container at `/app/vibe_router.py`. PYTHONPATH is set to `/app` so LiteLLM can import it:
+**Add Virtual Model**: Edit `SIMPLE_TASK_TARGETS` → Add 3 layers in `config_final.yaml` → Restart  
+**Modify Complexity**: Edit `_calculate_complexity()` or `COMPLEXITY_THRESHOLD = 50`  
+**Change Backend**: L1(OAuth)=model names, L2(NewAPI)=keep gpt-5, L3(Ark)=openai/glm-4.7
 
-```yaml
-environment:
-  - PYTHONPATH=/app
-```
+---
 
-To test plugin import inside container:
-```bash
-docker exec litellm-vibe-router python3 -c "import vibe_router; print('OK')"
-```
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| LiteLLM Port | 4000 |
+| CLIProxyAPI Port | 8317 |
+| Plugin Hook | `async_pre_call_hook` (must return data) |
+| Hook Order | Auth → Alias → **Hook** → Router → Backend |
+| Environment Syntax | `os.environ/VAR` (not `${VAR}`) |
+| Test Command | `python3 test_route.py` |
+| Log Filter | `grep VIBE-ROUTER` or `grep "ROUTING DECISION"` |
+
+**Virtual Models**: `chat-auto`, `chat-auto-mini`, `codex-auto`, `claude-auto`  
+**Backends**: CLIProxyAPI (OAuth) → New API (自建) → Volces Ark (付费)

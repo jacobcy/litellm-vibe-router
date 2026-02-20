@@ -8,8 +8,12 @@
 # 2. async_pre_call_hook handles simple task routing (complexity-based)
 # 3. LiteLLM router handles rate limit fallback (retry with next model in list)
 #
-# FALLBACK ORDER:
-#   chat-auto   (3层): CLIProxyAPI → New API → Volces Ark API
+# FALLBACK ORDER (3层降级策略):
+#   chat-auto   (3层):
+#     L1: CLIProxyAPI (Antigravity OAuth) → claude-sonnet-4-6 / gemini-2.5-flash
+#     L2: New API (自建转发) → gpt-5 / gpt-5-mini (会做模型转换)
+#     L3: Volces Ark API (商业付费) → glm-4.7 / ark-code-latest
+#
 #   claude-auto (2层): New API → Volces Ark API
 #   codex-auto  (1层): New API only (Volces 不支持 Codex 接口)
 #
@@ -48,18 +52,19 @@ model_list:
   # ==================================
   # These MUST exist to pass pre-hook validation
 
+  # Level 1: CLIProxyAPI (OAuth计算资源 - Antigravity)
   - model_name: chat-auto
     litellm_params:
-      model: "openai/gpt-5"
+      model: "claude-sonnet-4-6"  # Antigravity 标准模型
       api_base: http://cliproxyapi:8317/v1
-      api_key: "${CHAT_AUTO_API_KEY}"
+      api_key: os.environ/CHAT_AUTO_API_KEY
       custom_llm_provider: "openai"
 
   - model_name: chat-auto-mini
     litellm_params:
-      model: "gpt-5-mini"
+      model: "gemini-2.5-flash"  # Antigravity 轻量级模型
       api_base: http://cliproxyapi:8317/v1
-      api_key: "${CHAT_AUTO_API_KEY}"
+      api_key: os.environ/CHAT_AUTO_API_KEY
       custom_llm_provider: "openai"
 
   # codex-auto: 仅转发到 New API (无降级，Volces 不支持 Codex)
@@ -84,12 +89,12 @@ model_list:
   # 使用相同 model_name 创建 fallback 链
 
   # chat-auto 的 fallback 链 (3层降级)
-  # Level 2: New API
+  # Level 2: New API (会做模型转换)
   - model_name: chat-auto
     litellm_params:
-      model: "gpt-5"
+      model: "gpt-5"  # New API 会转换到实际模型
       api_base: http://host.docker.internal:3000/v1
-      api_key: "${NEW_API_KEY}"
+      api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "openai"
     model_info:
       fallback_order: 2
@@ -98,21 +103,21 @@ model_list:
   # Level 3: Volces Ark API (最终降级)
   - model_name: chat-auto
     litellm_params:
-      model: "openai/glm-4.7"
-      api_base: "${ARK_OPENAI_BASE}"
-      api_key: "${ARK_API_KEY}"
+      model: "openai/glm-4.7"  # Ark 实际支持的模型
+      api_base: os.environ/ARK_OPENAI_BASE
+      api_key: os.environ/ARK_API_KEY
       custom_llm_provider: "openai"
     model_info:
       fallback_order: 3
       fallback_reason: "rate_limit"
 
   # chat-auto-mini 的 fallback 链 (3层降级)
-  # Level 2: New API
+  # Level 2: New API (会做模型转换)
   - model_name: chat-auto-mini
     litellm_params:
-      model: "gpt-5-mini"
+      model: "gpt-5-mini"  # New API 会转换到实际模型
       api_base: http://host.docker.internal:3000/v1
-      api_key: "${NEW_API_KEY}"
+      api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "openai"
     model_info:
       fallback_order: 2
@@ -121,9 +126,9 @@ model_list:
   # Level 3: Volces Ark API (最终降级 - mini)
   - model_name: chat-auto-mini
     litellm_params:
-      model: "openai/ark-code-latest"
-      api_base: "${ARK_OPENAI_BASE}"
-      api_key: "${ARK_API_KEY}"
+      model: "openai/ark-code-latest"  # Ark 轻量级模型
+      api_base: os.environ/ARK_OPENAI_BASE
+      api_key: os.environ/ARK_API_KEY
       custom_llm_provider: "openai"
     model_info:
       fallback_order: 3
