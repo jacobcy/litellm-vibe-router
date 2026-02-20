@@ -47,7 +47,8 @@ def test_health() -> bool:
     print_header("Health Check")
     try:
         headers = {"Authorization": f"Bearer {API_KEY}"}
-        response = requests.get(f"{PROXY_URL}/health", headers=headers, timeout=15)
+        print_info("Checking proxy health (this may take 30-45 seconds)...")
+        response = requests.get(f"{PROXY_URL}/health", headers=headers, timeout=45)
         if response.status_code == 200:
             print_success(f"Proxy is healthy at {PROXY_URL}")
             return True

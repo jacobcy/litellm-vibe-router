@@ -75,6 +75,11 @@ if [ -f ".env" ]; then
     set +a
 fi
 
+if [ -z "${LITELLM_MASTER_KEY:-}" ]; then
+    print_error "LITELLM_MASTER_KEY is not set in .env"
+    exit 1
+fi
+
 if [ -z "${CHAT_AUTO_API_KEY:-}" ]; then
     print_error "CHAT_AUTO_API_KEY is not set in .env"
     exit 1
@@ -175,7 +180,7 @@ fi
 # Step 9: List available models
 print_info "Fetching available models..."
 echo ""
-curl -s -H "Authorization: Bearer sk-litellm-master-key-12345678" \
+curl -s -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
     http://localhost:4000/v1/models | python3 -m json.tool | grep '"id"' || print_error "Failed to fetch models"
 
 # Step 10: Summary
@@ -198,7 +203,7 @@ echo "Next Steps:"
 echo "  1. Run tests: python3 test_route.py"
 echo "  2. View logs: docker logs -f litellm-vibe-router"
 echo "  3. Test routing: curl -X POST http://localhost:4000/v1/chat/completions \\" 
-echo "                     -H 'Authorization: Bearer sk-litellm-master-key-12345678' \\" 
+echo "                     -H 'Authorization: Bearer ${LITELLM_MASTER_KEY}' \\" 
 echo "                     -H 'Content-Type: application/json' \\"
-echo "                     -d '{\"model\": \"chat-auto\", \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}]}'"
+echo "                     -d '{\"model\": \"chat-auto\", \"messages\": [{\"role\": \"user\", \"content\": \"hi\"}]}'"  
 echo ""

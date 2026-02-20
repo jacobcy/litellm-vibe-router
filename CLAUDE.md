@@ -42,17 +42,19 @@ Fallback Layers:
 ./deploy.sh                           # Auto-deploy all services
 docker-compose restart litellm        # Restart after config changes
 
-# Testing (setup virtual environment first)
-python3 -m venv .venv                 # Create venv (once)
-source .venv/bin/activate && pip install requests  # Install deps
+# Testing
+./test.sh                             # Run full test suite (auto-loads tests/.env)
 python3 tests/test_all_6_models.py    # Quick test all 6 models
-source tests/.env && python3 tests/test_route.py   # Full suite
 python3 tests/test_remote.py --url http://server:4000 --key sk-xxx
 
 # Manual test
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
   -d '{"model": "auto-chat", "messages": [{"role": "user", "content": "hi"}]}'
+
+# Health check (requires authentication!)
+curl -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
+  http://localhost:4000/health
 
 # Monitoring
 docker logs -f litellm-vibe-router 2>&1 | grep VIBE-ROUTER
@@ -157,12 +159,75 @@ litellm_settings:
 
 ## Troubleshooting
 
+### Common Issues
+
 | Issue | Symptom | Fix |
 |-------|---------|-----|
 | **Hook Not Executing** | Plugin loads but no routing | Add `callbacks: [vibe_router.router_instance]` to `litellm_settings` |
 | **Env Vars Not Expanding** | API calls fail with `"${VAR}"` | Use `os.environ/VAR` not `${VAR}` |
 | **Model Not Found** | 429/404 from CLIProxyAPI | Use actual backend models (e.g., `gemini-2.5-flash`) |
 | **Pydantic Validation** | `model_info.tier` error | Only use `"free"`/`"paid"` or remove tier |
+| **Health Check 401** | Unauthorized on `/health` | `/health` endpoint requires `Authorization: Bearer ${KEY}` |
+| **Health Check Timeout** | Request times out after 15s | `/health` checks all backends, needs 30-45s timeout |
+| **Test Script 401** | Tests fail with wrong key | Ensure `tests/.env` has correct `LITELLM_MASTER_KEY` |
+| **Hardcoded Keys** | Scripts use wrong API key | Never hardcode keys, always use `${LITELLM_MASTER_KEY}` |
+
+### Critical Warnings
+
+**⚠️ Health Endpoint Requires Authentication**
+```bash
+# ❌ Wrong - will return 401
+curl http://localhost:4000/health
+
+# ✅ Correct
+curl -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" http://localhost:4000/health
+```
+
+**⚠️ Health Check is Slow (30-45 seconds)**  
+The `/health` endpoint validates all configured backend models by making actual API calls. This is expected behavior and ensures real connectivity status.
+
+**⚠️ Environment Variable Loading in Scripts**
+```bash
+# ❌ Wrong - variables not exported to Python
+source .env
+python3 script.py
+
+# ✅ Correct - export variables
+set -a  # Auto-export mode
+source .env
+set +a
+python3 script.py
+```
+
+**⚠️ Response Content Reading**
+```python
+# ❌ Wrong - content can only be read once
+response = requests.post(...)
+print(response.content)  # First read
+print(response.content)  # Returns empty!
+
+# ✅ Correct - save or use .json()
+response = requests.post(...)
+data = response.json()  # Parse once
+print(data)
+```
+
+**⚠️ Hardcoded API Keys in Scripts**
+```bash
+# ❌ Never do this
+curl -H "Authorization: Bearer sk-litellm-master-key-12345678" ...
+
+# ✅ Always use environment variables
+curl -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" ...
+```
+
+**⚠️ Working Directory for Scripts**
+```bash
+# test.sh and deploy.sh must run from project root
+cd /path/to/liteLLM  # Ensure correct directory
+./deploy.sh          # ✅ Correct
+./test.sh            # ✅ Correct
+```
 
 ---
 
@@ -205,8 +270,14 @@ litellm_settings:
 | Plugin Hook | `async_pre_call_hook` (must return data) |
 | Hook Order | Auth → Alias → **Hook** → Router → Backend |
 | Environment Syntax | `os.environ/VAR` (not `${VAR}`) |
-| Test Command | `python3 tests/test_all_6_models.py` |
+| Test Command | `./test.sh` (auto-loads tests/.env) |
 | Log Filter | `grep VIBE-ROUTER` or `grep "ROUTING DECISION"` |
+| Health Check | Requires auth, takes 30-45s |
+| Response.content | Can only be read **once** per request |
 
 **Virtual Models**: `auto-chat`, `auto-chat-mini`, `auto-claude`, `auto-claude-mini`, `auto-codex`, `auto-codex-mini`  
 **Backends**: CLIProxyAPI (OAuth) → New API (自建) → Volces Ark (付费)
+
+**Required Environment Variables**:
+- Root `.env`: `LITELLM_MASTER_KEY`, `CHAT_AUTO_API_KEY`, `NEW_API_KEY`, `ARK_API_KEY`, `CLIPROXY_MANAGEMENT_KEY`
+- Test `tests/.env`: `LITELLM_MASTER_KEY`, `LITELLM_BASE_URL` (must match root `.env` key)
