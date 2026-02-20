@@ -6,20 +6,31 @@ Project documentation for LiteLLM Intelligent Router with 3-tier fallback strate
 
 ## Project Overview
 
-**Architecture**: LiteLLM Proxy + Intelligent Router Plugin + 3-Layer Fallback  
+**Architecture**: LiteLLM Proxy + 3-Layer Fallback Strategy  
 **Tech Stack**: Python 3.9+, Docker, LiteLLM Proxy, Redis, PostgreSQL  
-**Core Feature**: Virtual models auto-route based on complexity (< 50 = simple, ≥ 50 = complex)
+**Core Feature**: Virtual models with manual selection + automatic fallback on failures
 
-### 3-Layer Fallback Strategy
+**Current Status**:
+- ✅ **6 Virtual Models**: auto-chat, auto-chat-mini, auto-claude, auto-claude-mini, auto-codex, auto-codex-mini
+- ✅ **Manual Model Selection**: Users choose standard vs mini variants
+- ✅ **3-Layer Fallback**: CLIProxyAPI (OAuth) → New API → Volces Ark
+- 🚧 **Auto Complexity Routing**: Disabled (Next Plan - needs more testing and real-world data)
+
+### Virtual Models & Fallback Strategy
 
 ```
-chat-auto (3 layers):
-  L1: CLIProxyAPI (Antigravity OAuth) → claude-sonnet-4-6 / gemini-2.5-flash
-  L2: New API (自建转发) → gpt-5 / gpt-5-mini (模型转换)
-  L3: Volces Ark (商业付费) → glm-4.7 / ark-code-latest
+6 Virtual Models (All Configured):
+  ✅ auto-chat          (3 layers): Claude Sonnet 4-6 → gpt-5 → glm-4.7
+  ✅ auto-chat-mini     (3 layers): Gemini 2.5 Flash → gpt-5-mini → ark-code
+  ✅ auto-claude        (2 layers): Claude Sonnet 4-5 → glm-4.7
+  ✅ auto-claude-mini   (2 layers): Claude Haiku 4-5 → glm-4.7
+  ✅ auto-codex         (1 layer):  gpt-5.2-codex (New API only)
+  ✅ auto-codex-mini    (1 layer):  gpt-5-mini-codex (New API only)
 
-codex-auto (1 layer): New API only
-claude-auto (2 layers): New API → Volces Ark
+Fallback Layers:
+  L1: CLIProxyAPI (Antigravity OAuth) - Free tier with quota
+  L2: New API (自建转发) - Unlimited usage
+  L3: Volces Ark (商业付费) - Paid fallback
 ```
 
 ---
@@ -31,49 +42,58 @@ claude-auto (2 layers): New API → Volces Ark
 ./deploy.sh                           # Auto-deploy all services
 docker-compose restart litellm        # Restart after config changes
 
-# Testing (reads from .env)
-python3 tests/test_simple.py          # Quick routing test
-python3 tests/test_route.py           # Comprehensive tests
-python3 tests/test_remote.py          # Remote server tests
-python3 tests/test_remote.py --url http://server:4000 --key sk-xxx  # Custom args
+# Testing (setup virtual environment first)
+python3 -m venv .venv                 # Create venv (once)
+source .venv/bin/activate && pip install requests  # Install deps
+python3 tests/test_all_6_models.py    # Quick test all 6 models
+source tests/.env && python3 tests/test_route.py   # Full suite
+python3 tests/test_remote.py --url http://server:4000 --key sk-xxx
 
 # Manual test
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" \
-  -d '{"model": "chat-auto", "messages": [{"role": "user", "content": "hi"}]}'
+  -d '{"model": "auto-chat", "messages": [{"role": "user", "content": "hi"}]}'
 
 # Monitoring
 docker logs -f litellm-vibe-router 2>&1 | grep VIBE-ROUTER
-docker logs litellm-vibe-router 2>&1 | grep "SIMPLE\|COMPLEX"
+docker logs litellm-vibe-router 2>&1 | grep "PASSTHROUGH\|Hook triggered"
 ```
 
-**Admin UI**: `http://localhost:4000/ui/` (admin / from .env)  
-**Test Config**: Copy [tests/.env.example](tests/.env.example) to `.env` for test credentials
+**Admin UI**: `http://localhost:4000/ui/` (admin / from .env) - Generate Virtual Keys here  
+**Test Config**: Copy [tests/.env.example](tests/.env.example) to `tests/.env` and add your key
 
 ---
 
 ## Request Flow
 
 ```
-Client → LiteLLM (4000) → async_pre_call_hook (complexity check)
-  ├─ Simple (<50): Rewrite to lightweight model (gemini-2.5-flash)
-  └─ Complex (≥50): Keep original for fallback chain
+Client → LiteLLM (4000) → Virtual Model Selection (Manual)
+  ├─ auto-chat: Standard tasks (claude-sonnet-4-6) with 3-layer fallback
+  ├─ auto-chat-mini: Lightweight tasks (gemini-2.5-flash) with 3-layer fallback
+  ├─ auto-claude: Claude tasks (claude-sonnet-4-5) with 2-layer fallback
+  ├─ auto-claude-mini: Simple Claude (claude-haiku-4-5) with 2-layer fallback
+  ├─ auto-codex: Code tasks (gpt-5.2-codex) New API only
+  └─ auto-codex-mini: Simple code (gpt-5-mini-codex) New API only
     → Router → L1: CLIProxyAPI (OAuth) → L2: New API → L3: Ark API
 ```
 
-### Complexity Scoring
+**Model Selection Guide**:
+- **auto-chat**: Complex reasoning, long context, multi-step tasks
+- **auto-chat-mini**: Simple queries, quick responses, Q&A
+- **auto-claude**: Deep analysis, creative writing, complex reasoning
+- **auto-claude-mini**: Simple tasks, quick responses, lightweight
+- **auto-codex**: Complex code generation, algorithms, refactoring
+- **auto-codex-mini**: Simple code snippets, syntax help, quick fixes
 
-- Message length (max +200), Simple words (-100), Complex words (+150)
-- Code blocks (+100), Sentences >2 (+50), History >5 (+30)
-- **Threshold**: `COMPLEXITY_THRESHOLD = 50` in [vibe_router.py](vibe_router.py#L175)
-
----
+### Fallback Strategy (All Models)
 
 ## Key Files
 
-**[vibe_router.py](vibe_router.py)** - Intelligent router plugin
-- `SIMPLE_TASK_TARGETS = {"chat-auto": "chat-auto-mini", ...}` (L49-51)
-- `async_pre_call_hook()` - **MUST return modified `data`** (L127-218)
+**[vibe_router.py](vibe_router.py)** - Router plugin (metadata tracking only)
+- Currently in **passthrough mode** - no automatic routing
+- Adds metadata: `routing_mode: manual_selection`, `selected_model`
+- `async_pre_call_hook()` - **Returns data unmodified** (L118-160)
+- 🚧 **Next Plan**: Auto-complexity routing (commented out, L162-210)
 
 **[config_final.yaml](config_final.yaml)** - LiteLLM configuration
 - `model_list`: Virtual models + fallback chains with `fallback_order`
@@ -120,13 +140,13 @@ litellm_settings:
 ### Virtual Model Configuration
 ```yaml
 # L1: Use actual backend model
-- model_name: chat-auto
+- model_name: auto-chat
   litellm_params:
     model: "claude-sonnet-4-6"  # Antigravity model
     api_key: os.environ/CHAT_AUTO_API_KEY
 
 # L2-L3: Same model_name with fallback_order
-- model_name: chat-auto
+- model_name: auto-chat
   litellm_params:
     model: "gpt-5"
   model_info:
@@ -154,6 +174,28 @@ litellm_settings:
 
 ---
 
+## 🚧 Next Plan: Auto Complexity Routing
+
+**Current Status**: Disabled (commented out in [vibe_router.py](vibe_router.py#L162-210))
+
+**Why Disabled**:
+- Algorithm needs more testing with real-world data
+- Manual selection is more reliable and predictable
+- Focus on stable basic service first
+
+**Future Implementation**:
+1. Collect real request data and complexity patterns
+2. Train/tune prediction model with user feedback
+3. Add A/B testing framework to validate routing accuracy
+4. Implement gradual rollout with fallback to manual mode
+
+**When to Enable**:
+- After gathering ≥1000 production requests
+- Complexity prediction accuracy >90%
+- User satisfaction metrics validated
+
+---
+
 ## Quick Reference
 
 | Item | Value |
@@ -163,8 +205,8 @@ litellm_settings:
 | Plugin Hook | `async_pre_call_hook` (must return data) |
 | Hook Order | Auth → Alias → **Hook** → Router → Backend |
 | Environment Syntax | `os.environ/VAR` (not `${VAR}`) |
-| Test Command | `python3 test_route.py` |
+| Test Command | `python3 tests/test_all_6_models.py` |
 | Log Filter | `grep VIBE-ROUTER` or `grep "ROUTING DECISION"` |
 
-**Virtual Models**: `chat-auto`, `chat-auto-mini`, `codex-auto`, `claude-auto`  
+**Virtual Models**: `auto-chat`, `auto-chat-mini`, `auto-claude`, `auto-claude-mini`, `auto-codex`, `auto-codex-mini`  
 **Backends**: CLIProxyAPI (OAuth) → New API (自建) → Volces Ark (付费)
