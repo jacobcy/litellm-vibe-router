@@ -25,7 +25,7 @@ Project documentation for LiteLLM Intelligent Router with 3-tier fallback strate
   ✅ auto-claude        (2 layers): Claude Sonnet 4-5 → glm-4.7
   ✅ auto-claude-mini   (2 layers): Claude Haiku 4-5 → glm-4.7
   ✅ auto-codex         (1 layer):  gpt-5.2-codex (New API only)
-  ✅ auto-codex-mini    (1 layer):  gpt-5-mini-codex (New API only)
+  ✅ auto-codex-mini    (1 layer):  gpt-5.1-codex-mini (New API only)
 
 Fallback Layers:
   L1: CLIProxyAPI (Antigravity OAuth) - Free tier with quota
@@ -73,7 +73,7 @@ Client → LiteLLM (4000) → Virtual Model Selection (Manual)
   ├─ auto-claude: Claude tasks (claude-sonnet-4-5) with 2-layer fallback
   ├─ auto-claude-mini: Simple Claude (claude-haiku-4-5) with 2-layer fallback
   ├─ auto-codex: Code tasks (gpt-5.2-codex) New API only
-  └─ auto-codex-mini: Simple code (gpt-5-mini-codex) New API only
+  └─ auto-codex-mini: Simple code (gpt-5.1-codex-mini) New API only
     → Router → L1: CLIProxyAPI (OAuth) → L2: New API → L3: Ark API
 ```
 

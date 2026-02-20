@@ -20,7 +20,7 @@
 | 模型 | 后端 | 状态 | 错误 | 原因 |
 |------|------|------|------|------|
 | auto-codex | gpt-5.2-codex | ❌ FAIL | HTTP 403 | New API quota exceeded |
-| auto-codex-mini | gpt-5-mini-codex | ❌ FAIL | HTTP 503 | New API quota exceeded |
+| auto-codex-mini | gpt-5.1-codex-mini | ❌ FAIL | HTTP 503 | New API quota exceeded |
 
 **说明**: auto-codex 系列模型配置正确，但因 New API 账户 quota 耗尽而失败。这不是配置问题。
 
@@ -92,7 +92,7 @@ $ python3 tests/test_all_6_models.py
    - 注: Ark API 不支持 Codex 接口，无 fallback
 
 6. **auto-codex-mini** (1层, New API only):
-   - L1: New API → gpt-5-mini-codex
+   - L1: New API → gpt-5.1-codex-mini
    - 注: 同样无 fallback
 
 ### ✅ Router Settings 已更新
