@@ -52,7 +52,7 @@ print_success "Submodules initialized"
 # Step 3: Check required files
 print_info "Checking required files..."
 
-required_files=("config_final.yaml" "vibe_router.py" "docker-compose.yml" "test_route.py" "cliproxyapi.config.yaml")
+required_files=("config_final.yaml" "vibe_router.py" "docker-compose.yml" "test_route.py" "cliproxyapi.template.yaml")
 for file in "${required_files[@]}"; do
     if [ ! -f "$file" ]; then
         print_error "Required file missing: $file"
@@ -66,6 +66,43 @@ if [ ! -d "CLIProxyAPI" ]; then
 fi
 
 print_success "All required files present"
+
+if [ -f ".env" ]; then
+    print_info "Loading environment variables from .env..."
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+fi
+
+if [ -z "${CHAT_AUTO_API_KEY:-}" ]; then
+    print_error "CHAT_AUTO_API_KEY is not set in .env"
+    exit 1
+fi
+
+if [ ! -f "cliproxyapi.template.yaml" ]; then
+    print_error "Required template missing: cliproxyapi.template.yaml"
+    exit 1
+fi
+
+print_info "Generating CLIProxyAPI configuration from template..."
+python3 - <<'PY'
+from pathlib import Path
+import os
+
+path = Path("cliproxyapi.template.yaml")
+dest = Path("cliproxyapi.config.yaml")
+chat_key = os.environ.get("CHAT_AUTO_API_KEY", "").strip()
+if not chat_key:
+    raise SystemExit("CHAT_AUTO_API_KEY is required")
+
+content = path.read_text()
+if "{{CHAT_AUTO_API_KEY}}" not in content:
+    raise SystemExit("Template is missing {{CHAT_AUTO_API_KEY}} placeholder")
+
+dest.write_text(content.replace("{{CHAT_AUTO_API_KEY}}", chat_key))
+PY
+print_success "CLIProxyAPI config generated"
 
 # Step 4: Stop existing containers
 print_info "Stopping existing containers..."
