@@ -159,14 +159,14 @@ model_list:
     litellm_params:
       model: "claude-*"  # 保留 claude 前缀
       api_base: http://host.docker.internal:3000
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "anthropic"
 
   - model_name: "anthropic/*"
     litellm_params:
       model: "*"  # 保留 anthropic/ 前缀
       api_base: http://host.docker.internal:3000
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "anthropic"
 
   # OpenAI 模型 (其他所有模型）
@@ -174,7 +174,7 @@ model_list:
     litellm_params:
       model: "*"
       api_base: http://host.docker.internal:3000/v1
-      api_key: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
+      api_key: os.environ/NEW_API_KEY
 
 # ==========================================
 # 4. ROUTER SETTINGS
@@ -204,9 +204,9 @@ general_settings:
   # 客户端统一使用这个 key，LiteLLM 自动转发到配置的后端
   master_key: "${LITELLM_MASTER_KEY}"
 
-  # Admin UI credentials (can also be set via env vars UI_USERNAME/UI_PASSWORD)
-  ui_username: "admin"
-  ui_password: "admin123"
+  # Admin UI credentials (from env vars)
+  ui_username: os.environ/UI_USERNAME
+  ui_password: os.environ/UI_PASSWORD
 
 # ==========================================
 # 6. LITELLM SETTINGS
