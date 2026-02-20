@@ -11,7 +11,7 @@ cat << 'EOF'
 
 This implementation solves the following problems:
 
-1. ✓ Virtual models (chat-auto, codex-auto, claude-auto) pass validation
+1. ✓ Virtual models (auto-chat, auto-codex, auto-claude) pass validation
 2. ✓ Plugin intercepts BEFORE router resolution
 3. ✓ Complexity-based routing to physical pools
 4. ✓ Detailed logging for debugging
@@ -78,7 +78,7 @@ Step 3: Manual Test
   $ curl -X POST http://localhost:4000/v1/chat/completions \
       -H "Authorization: Bearer sk-vibe-master-123" \
       -H "Content-Type: application/json" \
-      -d '{"model": "chat-auto", "messages": [{"role": "user", "content": "hi"}]}'
+      -d '{"model": "auto-chat", "messages": [{"role": "user", "content": "hi"}]}'
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -103,15 +103,15 @@ Check Success/Failure:
 Virtual Model → Physical Pools:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  chat-auto:
+  auto-chat:
     Simple   → pool-chat-mini      (gpt-5-mini)
     Complex  → pool-chat-standard  (gpt-5)
 
-  codex-auto:
+  auto-codex:
     Simple   → pool-codex-mini     (gpt-5.1-codex-mini)
     Complex  → pool-codex-heavy    (gpt-5.2-codex)
 
-  claude-auto:
+  auto-claude:
     Simple   → pool-claude-haiku   (claude-haiku-4-5)
     Complex  → pool-claude-sonnet  (claude-sonnet-4-5)
 
@@ -151,7 +151,7 @@ Change Model Mappings:
   File: vibe_router.py
   
   self.route_map = {
-      "chat-auto": ("pool-chat-mini", "pool-chat-standard"),
+      "auto-chat": ("pool-chat-mini", "pool-chat-standard"),
       "your-auto": ("your-mini-pool", "your-heavy-pool"),
   }
 

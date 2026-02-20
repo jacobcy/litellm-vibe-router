@@ -75,7 +75,7 @@ def test_list_models(base_url: str, api_key: str) -> bool:
             print_success(f"找到 {len(model_list)} 个模型")
 
             # 检查虚拟模型
-            virtual_models = ['chat-auto', 'codex-auto', 'claude-auto']
+            virtual_models = ['auto-chat', 'auto-codex', 'auto-claude']
             found_virtual = [m for m in virtual_models if any(m == model.get('id') for model in model_list)]
 
             if found_virtual:
@@ -185,27 +185,27 @@ def run_all_tests(base_url: str, api_key: str):
 
     test_cases = [
         {
-            "model": "chat-auto",
+            "model": "auto-chat",
             "message": "hi",
-            "expected": "chat-auto-mini",
+            "expected": "auto-chat-mini",
             "desc": "简单消息 → Mini模型"
         },
         {
-            "model": "chat-auto",
+            "model": "auto-chat",
             "message": "Please provide a comprehensive analysis of distributed system architecture including microservices, event-driven design, and CQRS implementations.",
-            "expected": "chat-auto",
+            "expected": "auto-chat",
             "desc": "复杂消息 → Standard模型"
         },
         {
-            "model": "claude-auto",
+            "model": "auto-claude",
             "message": "ls",
-            "expected": "claude-auto",
+            "expected": "auto-claude",
             "desc": "简单命令 → Claude"
         },
         {
-            "model": "codex-auto",
+            "model": "auto-codex",
             "message": "Implement a concurrent lock-free hash table using compare-and-swap primitives.",
-            "expected": "codex-auto",
+            "expected": "auto-codex",
             "desc": "复杂代码 → Codex"
         },
     ]

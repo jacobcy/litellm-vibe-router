@@ -9,8 +9,8 @@
 | `vibe_router.py` | Main plugin implementing intelligent routing logic | ✅ Complete |
 | `config_final.yaml` | LiteLLM configuration with virtual & physical models | ✅ Complete |
 | `docker-compose.yml` | Docker deployment with LiteLLM + Redis | ✅ Complete |
-| `CLIProxyAPI/` | Submodule: CLIProxyAPI service for chat-auto isolation | ✅ Complete |
-| `cliproxyapi.config.yaml` | CLIProxyAPI config (dedicated chat-auto key) | ✅ Complete |
+| `CLIProxyAPI/` | Submodule: CLIProxyAPI service for auto-chat isolation | ✅ Complete |
+| `cliproxyapi.config.yaml` | CLIProxyAPI config (dedicated auto-chat key) | ✅ Complete |
 | `test_route.py` | Comprehensive test suite for routing verification | ✅ Complete |
 | `deploy.sh` | Automated deployment script | ✅ Complete |
 | `verify.py` | Quick health check without API calls | ✅ Complete |
@@ -51,7 +51,7 @@ Request Flow:
 │                    Client Application                           │
 └────────────────┬────────────────────────────────────────────────┘
                  │ POST /v1/chat/completions
-                 │ {"model": "chat-auto", "messages": [...]}
+                 │ {"model": "auto-chat", "messages": [...]}
                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │              LiteLLM Proxy (Port 4000)                          │
@@ -61,7 +61,7 @@ Request Flow:
 │                 ▼                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │ 2. Model Alias Mapping                                   │  │
-│  │    - chat-auto exists in model_list? ✓                   │  │
+│  │    - auto-chat exists in model_list? ✓                   │  │
 │  └──────────────┬───────────────────────────────────────────┘  │
 │                 ▼                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
@@ -79,7 +79,7 @@ Request Flow:
 │  │    │    data["model"] = "pool-chat-mini"           │      │  │
 │  │    ├──────────────────────────────────────────────┤      │  │
 │  │    │ d) Add metadata                               │      │  │
-│  │    │    metadata["virtual_model"] = "chat-auto"    │      │  │
+│  │    │    metadata["virtual_model"] = "auto-chat"    │      │  │
 │  │    │    metadata["complexity_score"] = -50         │      │  │
 │  │    └──────────────────────────────────────────────┘      │  │
 │  └──────────────┬───────────────────────────────────────────┘  │
@@ -204,7 +204,7 @@ python3 test_route.py
 
 **Symptoms:**
 ```
-ProxyModelNotFoundError: 400: model=chat-auto not found
+ProxyModelNotFoundError: 400: model=auto-chat not found
 ```
 
 No `[VIBE-ROUTER]` logs
@@ -243,7 +243,7 @@ Verify ALL physical pools exist in `config_final.yaml`:
 ```yaml
 model_list:
   # Virtual models
-  - model_name: chat-auto
+  - model_name: auto-chat
     ...
   
   # Physical pools (MUST EXIST)
@@ -265,9 +265,9 @@ model_list:
 **Symptoms:**
 ```
 [VIBE-ROUTER] Hook triggered
-[VIBE-ROUTER] Current model: chat-auto
+[VIBE-ROUTER] Current model: auto-chat
 (No routing decision log)
-(Request uses chat-auto instead of pool-chat-mini)
+(Request uses auto-chat instead of pool-chat-mini)
 ```
 
 **Root Cause**: Hook not returning modified `data` object
@@ -321,7 +321,7 @@ docker logs -f litellm-vibe-router 2>&1 | grep "ROUTING DECISION"
 # Example output:
 # [19:05:12] [VIBE-ROUTER] [INFO] ==============================
 # [19:05:12] [VIBE-ROUTER] [INFO] ✓ ROUTING DECISION:
-# [19:05:12] [VIBE-ROUTER] [INFO]   Virtual Model:    chat-auto
+# [19:05:12] [VIBE-ROUTER] [INFO]   Virtual Model:    auto-chat
 # [19:05:12] [VIBE-ROUTER] [INFO]   Target Pool:      pool-chat-mini
 # [19:05:12] [VIBE-ROUTER] [INFO]   Complexity Score: -98
 # [19:05:12] [VIBE-ROUTER] [INFO]   Decision:         SIMPLE → Mini/Haiku
@@ -421,7 +421,7 @@ Before considering deployment complete:
 
 ✅ **All Achieved:**
 
-1. ✅ Virtual models (chat-auto, codex-auto, claude-auto) accept requests
+1. ✅ Virtual models (auto-chat, auto-codex, auto-claude) accept requests
 2. ✅ Plugin rewrites to physical pools based on complexity
 3. ✅ Detailed logging shows routing decisions
 4. ✅ Automated tests verify routing behavior

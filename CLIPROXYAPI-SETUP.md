@@ -16,7 +16,7 @@
 │  LiteLLM Proxy (localhost:4000)          │
 │  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
 │  1️⃣ vibe_router.py 智能路由:            │
-│     • 简单任务 → chat-auto-mini          │
+│     • 简单任务 → auto-chat-mini          │
 │     • 复杂任务 → 保持原模型               │
 │                                           │
 │  2️⃣ LiteLLM Router 差异化降级:          │
@@ -25,7 +25,7 @@
        ├──────────────────────┬──────────────────────┬─────────────────────┐
        ▼                      ▼                      ▼                     ▼
 ┌────────────────┐    ┌────────────────┐    ┌────────────────┐    ┌────────────────┐
-│  chat-auto     │    │  claude-auto   │    │  codex-auto    │    │                │
+│  auto-chat     │    │  auto-claude   │    │  auto-codex    │    │                │
 │  (3层降级)     │    │  (2层降级)     │    │  (1层，无降级) │    │                │
 └────────────────┘    └────────────────┘    └────────────────┘    └────────────────┘
        │                      │                      │
@@ -48,18 +48,18 @@
 
 | 模型 | 降级层数 | 原因 |
 |------|---------|------|
-| **chat-auto** | 3层 | CLIProxyAPI 提供 OpenAI 兼容接口，专门服务 chat-auto |
-| **claude-auto** | 2层 | Volces Ark 支持 Claude 接口，可作为最终降级 |
-| **codex-auto** | 1层（无降级） | ⚠️ Volces Ark **不支持** Codex 接口，无法降级 |
+| **auto-chat** | 3层 | CLIProxyAPI 提供 OpenAI 兼容接口，专门服务 auto-chat |
+| **auto-claude** | 2层 | Volces Ark 支持 Claude 接口，可作为最终降级 |
+| **auto-codex** | 1层（无降级） | ⚠️ Volces Ark **不支持** Codex 接口，无法降级 |
 
 ### 模型映射关系（修正版）
 
 | 虚拟模型 | 简单任务目标 | 第1层(优先) | 第2层(降级) | 第3层(最终) |
 |---------|------------|------------|------------|------------|
-| **chat-auto** (复杂) | - | openai/gpt-5 @ CLIProxyAPI | gpt-5 @ New API | glm-4.7 @ Ark |
-| **chat-auto** (简单) | chat-auto-mini | gpt-5-mini @ CLIProxyAPI | gpt-5-mini @ New API | ark-code-latest @ Ark |
-| **claude-auto** | - | claude-sonnet-4-5 @ New API | glm-4.7 @ Ark | - |
-| **codex-auto** | - | gpt-5.2-codex @ New API | - | - |
+| **auto-chat** (复杂) | - | openai/gpt-5 @ CLIProxyAPI | gpt-5 @ New API | glm-4.7 @ Ark |
+| **auto-chat** (简单) | auto-chat-mini | gpt-5-mini @ CLIProxyAPI | gpt-5-mini @ New API | ark-code-latest @ Ark |
+| **auto-claude** | - | claude-sonnet-4-5 @ New API | glm-4.7 @ Ark | - |
+| **auto-codex** | - | gpt-5.2-codex @ New API | - | - |
 
 ---
 
@@ -73,9 +73,9 @@
    - 配置文件: `cliproxyapi.config.yaml` (已挂载)
    - 认证目录: `cliproxy_auth` volume
 3. **LiteLLM 配置**: `config_final.yaml` 3层降级链已配置
-   - chat-auto → CLIProxyAPI (第1级) → New API (第2级) → Volces Ark (第3级)
+   - auto-chat → CLIProxyAPI (第1级) → New API (第2级) → Volces Ark (第3级)
 4. **路由插件**: `vibe_router.py` 已更新
-   - 简单任务使用 `chat-auto-mini`
+   - 简单任务使用 `auto-chat-mini`
 5. **环境变量**: `.env` 文件已创建
    - Volces Ark API 密钥已配置
 6. **Git 忽略**: `.gitignore` 已更新，.env 不会被提交
@@ -89,7 +89,7 @@
 ```yaml
 # ⚠️ 第16行: LiteLLM 访问 CLIProxyAPI 的认证密钥
 api-keys:
-  - "sk-chat-auto-proxy-12345678"  # 替换成真实密钥
+  - "sk-auto-chat-proxy-12345678"  # 替换成真实密钥
 
 # ⚠️ 第27行: CLIProxyAPI 转发到上游 AI 服务的密钥
 codex-api-key:
@@ -179,24 +179,24 @@ docker exec litellm-vibe-router env | grep -E "ARK_|CHAT_AUTO_|NEW_API_"
 
 ### 5. 测试差异化降级链路
 
-#### 测试 chat-auto 第1级 (CLIProxyAPI)
+#### 测试 auto-chat 第1级 (CLIProxyAPI)
 
 ```bash
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-litellm-master-key-12345678" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "chat-auto",
+    "model": "auto-chat",
     "messages": [{"role": "user", "content": "hi"}]
   }'
 ```
 
 **预期**:
-- vibe_router 检测为简单任务 → 改写为 `chat-auto-mini`
+- vibe_router 检测为简单任务 → 改写为 `auto-chat-mini`
 - 请求发送到 CLIProxyAPI (8317)
-- 日志显示: `ROUTING DECISION: chat-auto-mini → cliproxyapi:8317`
+- 日志显示: `ROUTING DECISION: auto-chat-mini → cliproxyapi:8317`
 
-#### 测试 chat-auto 第2级降级 (New API)
+#### 测试 auto-chat 第2级降级 (New API)
 
 ```bash
 # 停止 CLIProxyAPI
@@ -206,7 +206,7 @@ docker stop cli-proxy-api
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-litellm-master-key-12345678" \
   -H "Content-Type: application/json" \
-  -d '{"model": "chat-auto", "messages": [{"role": "user", "content": "hello"}]}'
+  -d '{"model": "auto-chat", "messages": [{"role": "user", "content": "hello"}]}'
 ```
 
 **预期**:
@@ -214,7 +214,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 - 自动降级到第2级 (New API localhost:3000)
 - 日志显示: `Fallback triggered → gpt-5-mini @ host.docker.internal:3000`
 
-#### 测试 chat-auto 第3级最终降级 (Volces Ark)
+#### 测试 auto-chat 第3级最终降级 (Volces Ark)
 
 ```bash
 # 保持 CLIProxyAPI 停止，假设 New API 也不可用
@@ -223,7 +223,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-litellm-master-key-12345678" \
   -H "Content-Type: application/json" \
-  -d '{"model": "chat-auto", "messages": [{"role": "user", "content": "test"}]}'
+  -d '{"model": "auto-chat", "messages": [{"role": "user", "content": "test"}]}'
 ```
 
 **预期**:
@@ -234,7 +234,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ---
 
-#### 测试 claude-auto (2层降级)
+#### 测试 auto-claude (2层降级)
 
 ```bash
 # 第1级: New API
@@ -242,7 +242,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-litellm-master-key-12345678" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-auto",
+    "model": "auto-claude",
     "messages": [{"role": "user", "content": "explain async/await"}]
   }'
 ```
@@ -258,7 +258,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-litellm-master-key-12345678" \
   -H "Content-Type: application/json" \
-  -d '{"model": "claude-auto", "messages": [{"role": "user", "content": "test"}]}'
+  -d '{"model": "auto-claude", "messages": [{"role": "user", "content": "test"}]}'
 ```
 
 **预期**:
@@ -268,14 +268,14 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 
 ---
 
-#### 测试 codex-auto (无降级)
+#### 测试 auto-codex (无降级)
 
 ```bash
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-litellm-master-key-12345678" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "codex-auto",
+    "model": "auto-codex",
     "messages": [{"role": "user", "content": "write a quicksort function"}]
   }'
 ```
@@ -451,7 +451,7 @@ environment:
 
 **重要提示**: 
 - `.env` 文件包含真实 API 密钥，已添加到 .gitignore
-- 所有占位符密钥 (`sk-chat-auto-proxy-12345678` 等) 必须替换成真实密钥
+- 所有占位符密钥 (`sk-auto-chat-proxy-12345678` 等) 必须替换成真实密钥
 - Volces Ark API 密钥已配置在 `.env` 中 (第3层最终降级)
 - 部署前请确认所有密钥配置正确，否则服务无法正常工作!
 
@@ -473,21 +473,21 @@ environment:
 
 | 虚拟模型 | 层数 | 第1层 (优先) | 第2层 (降级) | 第3层 (最终) |
 |---------|-----|-------------|-------------|-------------|
-| **chat-auto** (复杂) | 3层 | openai/gpt-5<br/>@ CLIProxyAPI:8317 | gpt-5<br/>@ New API:3000 | glm-4.7<br/>@ Volces Ark |
-| **chat-auto-mini** (简单) | 3层 | gpt-5-mini<br/>@ CLIProxyAPI:8317 | gpt-5-mini<br/>@ New API:3000 | ark-code-latest<br/>@ Volces Ark |
-| **claude-auto** | 2层 | claude-sonnet-4-5<br/>@ New API:3000 | glm-4.7<br/>@ Volces Ark | - |
-| **codex-auto** | 1层 | gpt-5.2-codex<br/>@ New API:3000 | - | - |
+| **auto-chat** (复杂) | 3层 | openai/gpt-5<br/>@ CLIProxyAPI:8317 | gpt-5<br/>@ New API:3000 | glm-4.7<br/>@ Volces Ark |
+| **auto-chat-mini** (简单) | 3层 | gpt-5-mini<br/>@ CLIProxyAPI:8317 | gpt-5-mini<br/>@ New API:3000 | ark-code-latest<br/>@ Volces Ark |
+| **auto-claude** | 2层 | claude-sonnet-4-5<br/>@ New API:3000 | glm-4.7<br/>@ Volces Ark | - |
+| **auto-codex** | 1层 | gpt-5.2-codex<br/>@ New API:3000 | - | - |
 
 ### 重要说明
 
-- ✅ **chat-auto**: CLIProxyAPI 提供专门的 OpenAI 兼容接口，3层降级
-- ✅ **claude-auto**: New API → Volces Ark，2层降级  
-- ⚠️ **codex-auto**: 仅 New API，**无降级**（Volces 不支持 Codex 接口）
+- ✅ **auto-chat**: CLIProxyAPI 提供专门的 OpenAI 兼容接口，3层降级
+- ✅ **auto-claude**: New API → Volces Ark，2层降级  
+- ⚠️ **auto-codex**: 仅 New API，**无降级**（Volces 不支持 Codex 接口）
 
 ### CLIProxyAPI 使用范围
 
-**仅服务于 chat-auto 和 chat-auto-mini**：
-- ✅ chat-auto → CLIProxyAPI
-- ✅ chat-auto-mini → CLIProxyAPI
-- ❌ codex-auto → 不经过 CLIProxyAPI
-- ❌ claude-auto → 不经过 CLIProxyAPI
+**仅服务于 auto-chat 和 auto-chat-mini**：
+- ✅ auto-chat → CLIProxyAPI
+- ✅ auto-chat-mini → CLIProxyAPI
+- ❌ auto-codex → 不经过 CLIProxyAPI
+- ❌ auto-claude → 不经过 CLIProxyAPI

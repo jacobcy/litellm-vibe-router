@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   # ==================================
-  # CLIProxyAPI (chat-auto dedicated API)
+  # CLIProxyAPI (auto-chat dedicated API)
   # ==================================
   cliproxyapi:
     build:

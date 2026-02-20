@@ -2,7 +2,7 @@
 
 ## 🎯 Overview
 
-This project implements **intelligent model routing** for LiteLLM Proxy, enabling automatic model selection based on request complexity. Users send requests to virtual models (`chat-auto`, `codex-auto`, `claude-auto`), and the system automatically routes to appropriate physical models based on query complexity and rate limits.
+This project implements **intelligent model routing** for LiteLLM Proxy, enabling automatic model selection based on request complexity. Users send requests to virtual models (`auto-chat`, `auto-codex`, `auto-claude`), and the system automatically routes to appropriate physical models based on query complexity and rate limits.
 
 ### Architecture
 
@@ -14,9 +14,9 @@ This project implements **intelligent model routing** for LiteLLM Proxy, enablin
                               │                         │
                               ▼                         ▼
                         Virtual Models           Intelligent Routing
-                        - chat-auto       ┌──▶ Simple → Mini Models
-                        - codex-auto      │    Complex → Main Models
-                        - claude-auto     ├──▶ Rate Limit Fallback
+                        - auto-chat       ┌──▶ Simple → Mini Models
+                        - auto-codex      │    Complex → Main Models
+                        - auto-claude     ├──▶ Rate Limit Fallback
                                           │    Wildcard Passthrough
                                           └──▶ Direct Model Access
 ```
@@ -51,7 +51,7 @@ git submodule update --init --recursive
 
 This will:
 - Start LiteLLM proxy, PostgreSQL, and Redis
-- Start CLIProxyAPI for chat-auto isolation (port 8317)
+- Start CLIProxyAPI for auto-chat isolation (port 8317)
 - Verify plugin loading
 - Check service health
 
@@ -70,7 +70,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-litellm-master-key-12345678" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "chat-auto",
+    "model": "auto-chat",
     "messages": [{"role": "user", "content": "hi"}]
   }'
 
@@ -79,7 +79,7 @@ curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Authorization: Bearer sk-litellm-master-key-12345678" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-auto",
+    "model": "auto-claude",
     "messages": [{
       "role": "user",
       "content": "Implement a distributed algorithm for concurrent data processing"
@@ -122,13 +122,13 @@ Three virtual entry points with intelligent routing:
 
 | Virtual Model | Simple Route       | Complex Route         | Rate Limit Fallback |
 |--------------|--------------------|-----------------------|-------------------|
-| `chat-auto`  | gpt-5-mini        | openai/gpt-5         | gpt-5            |
-| `codex-auto` | gpt-5.1-codex-mini| openai/gpt-5.2-codex | gpt-5.2-codex    |
-| `claude-auto`| claude-haiku-4-5  | anthropic/claude-sonnet-4-5 | claude-sonnet-4-5 |
+| `auto-chat`  | gpt-5-mini        | openai/gpt-5         | gpt-5            |
+| `auto-codex` | gpt-5.1-codex-mini| openai/gpt-5.2-codex | gpt-5.2-codex    |
+| `auto-claude`| claude-haiku-4-5  | anthropic/claude-sonnet-4-5 | claude-sonnet-4-5 |
 
-**chat-auto Isolation**
+**auto-chat Isolation**
 
-`chat-auto` uses a dedicated API base (CLIProxyAPI on port 8317) with its own key to
+`auto-chat` uses a dedicated API base (CLIProxyAPI on port 8317) with its own key to
 reduce 429 errors and keep traffic isolated.
 
 ### Routing Logic
@@ -161,9 +161,9 @@ Edit `vibe_router.py`:
 ```python
 # Simple task targets
 SIMPLE_TASK_TARGETS = {
-    "chat-auto": "gpt-5-mini",
-    "codex-auto": "gpt-5.1-codex-mini",
-    "claude-auto": "claude-haiku-4-5"
+    "auto-chat": "gpt-5-mini",
+    "auto-codex": "gpt-5.1-codex-mini",
+    "auto-claude": "claude-haiku-4-5"
 }
 
 # Complexity threshold (default: 50)
@@ -189,10 +189,10 @@ Backend API key is configured in `config_final.yaml`:
 NEW_API_KEY: sk-6cjjC0tbmfadXNqsrIABJO6nPBuYXKHtacIU0YFvoRxfTAQh
 ```
 
-chat-auto dedicated API:
+auto-chat dedicated API:
 ```yaml
 CHAT_AUTO_API_BASE: http://cliproxyapi:8317/v1
-CHAT_AUTO_API_KEY: sk-chat-auto-proxy-12345678
+CHAT_AUTO_API_KEY: sk-auto-chat-proxy-12345678
 ```
 
 ## 📊 Monitoring
@@ -259,7 +259,7 @@ open http://localhost:4000/ui/
 ### Routing Decision Flow
 
 ```
-Request → chat-auto
+Request → auto-chat
     ↓
 async_pre_call_hook analyzes complexity
     ↓
@@ -279,9 +279,9 @@ async_pre_call_hook analyzes complexity
 ```python
 class VibeIntelligentRouter(CustomLogger):
     SIMPLE_TASK_TARGETS = {
-        "chat-auto": "gpt-5-mini",
-        "codex-auto": "gpt-5.1-codex-mini",
-        "claude-auto": "claude-haiku-4-5"
+        "auto-chat": "gpt-5-mini",
+        "auto-codex": "gpt-5.1-codex-mini",
+        "auto-claude": "claude-haiku-4-5"
     }
 
     async def async_pre_call_hook(self, ...):
@@ -340,7 +340,7 @@ docker-compose up -d
 
 ### Model Not Found Errors
 
-**Symptoms**: `ProxyModelNotFoundError: model=chat-auto`
+**Symptoms**: `ProxyModelNotFoundError: model=auto-chat`
 
 **Cause**: Virtual models not defined in `config_final.yaml`
 
@@ -348,12 +348,12 @@ docker-compose up -d
 ```yaml
 model_list:
   # Virtual entry point
-  - model_name: chat-auto
+  - model_name: auto-chat
     litellm_params:
       model: "openai/gpt-5"
 
   # Rate limit fallback
-  - model_name: chat-auto
+  - model_name: auto-chat
     litellm_params:
       model: "gpt-5"
     model_info:
