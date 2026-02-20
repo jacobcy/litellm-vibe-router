@@ -80,6 +80,11 @@ if [ -z "${CHAT_AUTO_API_KEY:-}" ]; then
     exit 1
 fi
 
+if [ -z "${CLIPROXY_MANAGEMENT_KEY:-}" ]; then
+    print_error "CLIPROXY_MANAGEMENT_KEY is not set in .env"
+    exit 1
+fi
+
 if [ ! -f "cliproxyapi.template.yaml" ]; then
     print_error "Required template missing: cliproxyapi.template.yaml"
     exit 1
@@ -93,14 +98,22 @@ import os
 path = Path("cliproxyapi.template.yaml")
 dest = Path("cliproxyapi.config.yaml")
 chat_key = os.environ.get("CHAT_AUTO_API_KEY", "").strip()
+mgmt_key = os.environ.get("CLIPROXY_MANAGEMENT_KEY", "").strip()
+
 if not chat_key:
     raise SystemExit("CHAT_AUTO_API_KEY is required")
+if not mgmt_key:
+    raise SystemExit("CLIPROXY_MANAGEMENT_KEY is required")
 
 content = path.read_text()
 if "{{CHAT_AUTO_API_KEY}}" not in content:
     raise SystemExit("Template is missing {{CHAT_AUTO_API_KEY}} placeholder")
+if "{{CLIPROXY_MANAGEMENT_KEY}}" not in content:
+    raise SystemExit("Template is missing {{CLIPROXY_MANAGEMENT_KEY}} placeholder")
 
-dest.write_text(content.replace("{{CHAT_AUTO_API_KEY}}", chat_key))
+content = content.replace("{{CHAT_AUTO_API_KEY}}", chat_key)
+content = content.replace("{{CLIPROXY_MANAGEMENT_KEY}}", mgmt_key)
+dest.write_text(content)
 PY
 print_success "CLIProxyAPI config generated"
 

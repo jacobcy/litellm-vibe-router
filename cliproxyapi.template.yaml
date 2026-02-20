@@ -24,12 +24,12 @@ codex-api-key:
     # base-url: "https://api.openai.com/v1"
 
 # ==========================================
-# 管理 API 设置（保持禁用）
+# 管理 API 设置（用于 OAuth 登录）
 # ==========================================
 remote-management:
-  allow-remote: false
-  secret-key: ""
-  disable-control-panel: true
+  allow-remote: true  # 允许远程访问管理界面
+  secret-key: "{{CLIPROXY_MANAGEMENT_KEY}}"  # 管理界面密码
+  disable-control-panel: false  # 启用 Web 控制面板
 
 # ==========================================
 # 运行时设置
