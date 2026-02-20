@@ -8,7 +8,7 @@ LiteLLM Intelligent Router Plugin
 2. 复杂任务 (复杂度 >= 50): 使用默认模型
 3. 限流/失败: LiteLLM router 自动 fallback 到下一级模型
 
-Fallback 链 (chat-auto 为例):
+Fallback 链 (auto-chat 为例):
     openai/gpt-5 (主模型) → gpt-5 (限流回落)
 """
 
@@ -40,7 +40,7 @@ except ImportError as e:
 class VibeIntelligentRouter(CustomLogger):
     """
     智能路由器：
-    - 处理所有虚拟模型 (chat-auto, codex-auto, claude-auto)
+    - 处理所有虚拟模型 (auto-chat, auto-codex, auto-claude)
     - 根据复杂度判定简单任务
     - 简单任务直接路由到轻量级模型
     - LiteLLM router 处理限流回落
@@ -48,9 +48,8 @@ class VibeIntelligentRouter(CustomLogger):
 
     # 简单任务直接路由的目标模型
     SIMPLE_TASK_TARGETS = {
-        "chat-auto": "chat-auto-mini",
-        "codex-auto": "gpt-5.1-codex-mini",
-        "claude-auto": "claude-haiku-4-5"
+        "auto-chat": "auto-chat-mini",
+        # auto-codex 和 auto-claude 不重写，让 LiteLLM 自己路由
     }
 
     def __init__(self):
@@ -144,6 +143,20 @@ class VibeIntelligentRouter(CustomLogger):
         4. 路由器模型解析
         5. 模型验证
         6. LiteLLM API 调用
+
+        ======================================================================
+        🚧 NEXT PLAN: 自动复杂度判断路由（暂时禁用）
+        ======================================================================
+        当前策略：让用户手动选择 auto-chat 或 auto-chat-mini
+        原因：
+          1. 复杂度判断算法需要更多测试和调优
+          2. 用户明确选择更可靠、可预测
+          3. 先保证基础服务稳定运行
+        未来计划：
+          - 收集更多真实请求数据
+          - 训练更准确的复杂度预测模型
+          - 添加用户反馈机制优化算法
+        ======================================================================
         """
         try:
             _log(f"Hook triggered - call_type={call_type}")
@@ -157,58 +170,77 @@ class VibeIntelligentRouter(CustomLogger):
             original_model = data.get("model")
             _log(f"Original model: {original_model}")
 
-            # 只处理虚拟模型
-            if original_model not in self.SIMPLE_TASK_TARGETS:
-                _log("Not a virtual model, passing through")
-                return data
+            # ============================================================
+            # 🚧 COMPLEXITY-BASED ROUTING (DISABLED)
+            # ============================================================
+            # 当前直接透传，不做任何路由重写
+            # 用户需要明确选择：auto-chat（标准）或 auto-chat-mini（轻量）
+            _log(f"Routing: PASSTHROUGH (user choice: {original_model})")
+            
+            # 添加元数据用于可观察性
+            if "metadata" not in data:
+                data["metadata"] = {}
+            data["metadata"]["routing_mode"] = "manual_selection"
+            data["metadata"]["selected_model"] = original_model
 
-            # 提取消息
-            messages = data.get("messages", [])
-            if not messages:
-                _log("No messages found, using default model", "WARN")
-                return data
-
-            # 计算复杂度
-            complexity_score = self._calculate_complexity(messages)
-
-            # 决策阈值
-            COMPLEXITY_THRESHOLD = 50
-            is_simple = complexity_score < COMPLEXITY_THRESHOLD
-
-            # 简单任务：直接路由到轻量级模型
-            if is_simple:
-                target_model = self.SIMPLE_TASK_TARGETS[original_model]
-                data["model"] = target_model
-
-                # 添加元数据用于可观察性
-                if "metadata" not in data:
-                    data["metadata"] = {}
-                data["metadata"]["virtual_model"] = original_model
-                data["metadata"]["routed_model"] = target_model
-                data["metadata"]["complexity_score"] = complexity_score
-                data["metadata"]["routing_reason"] = "simple_task"
-
-                _log("=" * 70)
-                _log(f"✓ SIMPLE TASK ROUTING:")
-                _log(f"  Virtual Model:    {original_model}")
-                _log(f"  Target Model:      {target_model}")
-                _log(f"  Complexity Score:  {complexity_score}")
-                _log(f"  Decision:          SIMPLE → Lightweight Model")
-                _log(f"  Message Preview:   {messages[-1].get('content', '')[:60]}...")
-                _log("=" * 70)
-            else:
-                # 复杂任务：使用默认模型，LiteLLM router 会处理限流回落
-                _log(f"Complex task (score={complexity_score}), using default model for fallback chain")
-
-                # 添加元数据
-                if "metadata" not in data:
-                    data["metadata"] = {}
-                data["metadata"]["virtual_model"] = original_model
-                data["metadata"]["complexity_score"] = complexity_score
-                data["metadata"]["routing_reason"] = "complex_task"
-
-            # 关键：必须返回修改后的 data 对象
+            # 直接返回原始请求，由 LiteLLM fallback 链处理
             return data
+
+            # ============================================================
+            # 🔽 ORIGINAL COMPLEXITY LOGIC (COMMENTED OUT FOR NEXT PLAN)
+            # ============================================================
+            # # 只处理虚拟模型
+            # if original_model not in self.SIMPLE_TASK_TARGETS:
+            #     _log("Not a virtual model, passing through")
+            #     return data
+            #
+            # # 提取消息
+            # messages = data.get("messages", [])
+            # if not messages:
+            #     _log("No messages found, using default model", "WARN")
+            #     return data
+            #
+            # # 计算复杂度
+            # complexity_score = self._calculate_complexity(messages)
+            #
+            # # 决策阈值
+            # COMPLEXITY_THRESHOLD = 50
+            # is_simple = complexity_score < COMPLEXITY_THRESHOLD
+            #
+            # # 简单任务：直接路由到轻量级模型
+            # if is_simple:
+            #     target_model = self.SIMPLE_TASK_TARGETS[original_model]
+            #     data["model"] = target_model
+            #
+            #     # 添加元数据用于可观察性
+            #     if "metadata" not in data:
+            #         data["metadata"] = {}
+            #     data["metadata"]["virtual_model"] = original_model
+            #     data["metadata"]["routed_model"] = target_model
+            #     data["metadata"]["complexity_score"] = complexity_score
+            #     data["metadata"]["routing_reason"] = "simple_task"
+            #
+            #     _log("=" * 70)
+            #     _log(f"✓ SIMPLE TASK ROUTING:")
+            #     _log(f"  Virtual Model:    {original_model}")
+            #     _log(f"  Target Model:      {target_model}")
+            #     _log(f"  Complexity Score:  {complexity_score}")
+            #     _log(f"  Decision:          SIMPLE → Lightweight Model")
+            #     _log(f"  Message Preview:   {messages[-1].get('content', '')[:60]}...")
+            #     _log("=" * 70)
+            # else:
+            #     # 复杂任务：使用默认模型，LiteLLM router 会处理限流回落
+            #     _log(f"Complex task (score={complexity_score}), using default model for fallback chain")
+            #
+            #     # 添加元数据
+            #     if "metadata" not in data:
+            #         data["metadata"] = {}
+            #     data["metadata"]["virtual_model"] = original_model
+            #     data["metadata"]["complexity_score"] = complexity_score
+            #     data["metadata"]["routing_reason"] = "complex_task"
+            #
+            # # 关键：必须返回修改后的 data 对象
+            # return data
 
         except Exception as e:
             _log(f"ERROR in async_pre_call_hook: {str(e)}", "ERROR")

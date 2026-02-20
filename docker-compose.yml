@@ -59,8 +59,8 @@ services:
       - ./config_final.yaml:/app/config.yaml:ro
       - ./vibe_router.py:/app/vibe_router.py:ro
 
-      # Optional: mount test script for in-container testing
-      - ./test_route.py:/app/test_route.py:ro
+      # Optional: mount test scripts for in-container testing
+      - ./tests:/app/tests:ro
 
     environment:
       # CRITICAL: Python path for plugin import
@@ -80,8 +80,9 @@ services:
       # Logging level (INFO, DEBUG, WARNING, ERROR)
       - LOG_LEVEL=INFO
 
-      # Level 2: New API configuration
-      - NEW_API_BASE=http://host.docker.internal:3000/v1
+      # Level 2: New API configuration (from .env)
+      - NEW_API_BASE=${NEW_API_BASE}
+      - NEW_API_ANTHROPIC_BASE=${NEW_API_ANTHROPIC_BASE}
       - NEW_API_KEY=${NEW_API_KEY}
 
       # Level 1: CLIProxyAPI configuration
@@ -121,9 +122,9 @@ services:
 
     restart: unless-stopped
 
-    # Health check
+    # Health check (using /health/liveliness which doesn't require auth)
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:4000/health || exit 1" ]
+      test: [ "CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:4000/health/liveliness\")' || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -3,19 +3,19 @@
 # ==========================================
 #
 # ARCHITECTURE:
-# 1. Virtual models (chat-auto, codex-auto, claude-auto) exist in model_list
+# 1. Virtual models (auto-chat, auto-codex, auto-claude) exist in model_list
 #    → This passes LiteLLM's pre-hook model validation
 # 2. async_pre_call_hook handles simple task routing (complexity-based)
 # 3. LiteLLM router handles rate limit fallback (retry with next model in list)
 #
 # FALLBACK ORDER (3层降级策略):
-#   chat-auto   (3层):
+#   auto-chat   (3层):
 #     L1: CLIProxyAPI (Antigravity OAuth) → claude-sonnet-4-6 / gemini-2.5-flash
 #     L2: New API (自建转发) → gpt-5 / gpt-5-mini (会做模型转换)
 #     L3: Volces Ark API (商业付费) → glm-4.7 / ark-code-latest
 #
-#   claude-auto (2层): New API → Volces Ark API
-#   codex-auto  (1层): New API only (Volces 不支持 Codex 接口)
+#   auto-claude (2层): New API → Volces Ark API
+#   auto-codex  (1层): New API only (Volces 不支持 Codex 接口)
 #
 # EXECUTION ORDER:
 # Request → Virtual Key Auth → Model Alias Map → async_pre_call_hook (SIMPLE TASK CHECK) → Router (RATE LIMIT FALLBACK) → Backend APIs
@@ -31,7 +31,8 @@ environment_variables:
   ANTHROPIC_API_KEY: "${NEW_API_KEY}"
 
   # Level 2: New API (第2层降级)
-  NEW_API_BASE: "http://host.docker.internal:3000/v1"
+  NEW_API_BASE: "${NEW_API_BASE}"
+  NEW_API_ANTHROPIC_BASE: "${NEW_API_ANTHROPIC_BASE}"
   NEW_API_KEY: "${NEW_API_KEY}"
 
   # Level 1: CLIProxyAPI (第1层优先)
@@ -53,34 +54,58 @@ model_list:
   # These MUST exist to pass pre-hook validation
 
   # Level 1: CLIProxyAPI (OAuth计算资源 - Antigravity)
-  - model_name: chat-auto
+  - model_name: auto-chat
     litellm_params:
       model: "claude-sonnet-4-6"  # Antigravity 标准模型
       api_base: http://cliproxyapi:8317/v1
       api_key: os.environ/CHAT_AUTO_API_KEY
       custom_llm_provider: "openai"
 
-  - model_name: chat-auto-mini
+  - model_name: auto-chat-mini
     litellm_params:
       model: "gemini-2.5-flash"  # Antigravity 轻量级模型
       api_base: http://cliproxyapi:8317/v1
       api_key: os.environ/CHAT_AUTO_API_KEY
       custom_llm_provider: "openai"
 
-  # codex-auto: 仅转发到 New API (无降级，Volces 不支持 Codex)
-  - model_name: codex-auto
+  # auto-codex: 仅转发到 New API (无降级，Volces 不支持 Codex)
+  - model_name: auto-codex
     litellm_params:
       model: "openai/gpt-5.2-codex"
-      api_base: http://host.docker.internal:3000/v1
-      api_key: "${NEW_API_KEY}"
+      api_base: os.environ/NEW_API_BASE
+      api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "openai"
 
-  # claude-auto: 第1层 New API (会降级到 Volces Ark)
-  - model_name: claude-auto
+  # auto-codex-mini: 轻量级代码模型
+  - model_name: auto-codex-mini
+    litellm_params:
+      model: "openai/gpt-5-mini-codex"
+      api_base: os.environ/NEW_API_BASE
+      api_key: os.environ/NEW_API_KEY
+      custom_llm_provider: "openai"
+
+  # auto-claude: 第1层 New API (会降级到 Volces Ark)
+  - model_name: auto-claude
     litellm_params:
       model: "anthropic/claude-sonnet-4-5"
-      api_base: http://host.docker.internal:3000
-      api_key: "${NEW_API_KEY}"
+      api_base: os.environ/NEW_API_ANTHROPIC_BASE
+      api_key: os.environ/NEW_API_KEY
+      custom_llm_provider: "anthropic"
+
+  # auto-claude-mini: 轻量级 Claude 模型
+  - model_name: auto-claude-mini
+    litellm_params:
+      model: "anthropic/claude-haiku-4-5"
+      api_base: os.environ/NEW_API_ANTHROPIC_BASE
+      api_key: os.environ/NEW_API_KEY
+      custom_llm_provider: "anthropic"
+
+  # claude-haiku-4-5: 轻量级 Claude 模型（简单任务）
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: "anthropic/claude-haiku-4-5"
+      api_base: os.environ/NEW_API_ANTHROPIC_BASE
+      api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "anthropic"
 
   # ==================================
@@ -88,12 +113,12 @@ model_list:
   # ==================================
   # 使用相同 model_name 创建 fallback 链
 
-  # chat-auto 的 fallback 链 (3层降级)
+  # auto-chat 的 fallback 链 (3层降级)
   # Level 2: New API (会做模型转换)
-  - model_name: chat-auto
+  - model_name: auto-chat
     litellm_params:
       model: "gpt-5"  # New API 会转换到实际模型
-      api_base: http://host.docker.internal:3000/v1
+      api_base: os.environ/NEW_API_BASE
       api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "openai"
     model_info:
@@ -101,7 +126,7 @@ model_list:
       fallback_reason: "rate_limit"
 
   # Level 3: Volces Ark API (最终降级)
-  - model_name: chat-auto
+  - model_name: auto-chat
     litellm_params:
       model: "openai/glm-4.7"  # Ark 实际支持的模型
       api_base: os.environ/ARK_OPENAI_BASE
@@ -111,12 +136,12 @@ model_list:
       fallback_order: 3
       fallback_reason: "rate_limit"
 
-  # chat-auto-mini 的 fallback 链 (3层降级)
+  # auto-chat-mini 的 fallback 链 (3层降级)
   # Level 2: New API (会做模型转换)
-  - model_name: chat-auto-mini
+  - model_name: auto-chat-mini
     litellm_params:
       model: "gpt-5-mini"  # New API 会转换到实际模型
-      api_base: http://host.docker.internal:3000/v1
+      api_base: os.environ/NEW_API_BASE
       api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "openai"
     model_info:
@@ -124,7 +149,7 @@ model_list:
       fallback_reason: "rate_limit"
 
   # Level 3: Volces Ark API (最终降级 - mini)
-  - model_name: chat-auto-mini
+  - model_name: auto-chat-mini
     litellm_params:
       model: "openai/ark-code-latest"  # Ark 轻量级模型
       api_base: os.environ/ARK_OPENAI_BASE
@@ -137,20 +162,32 @@ model_list:
   # ==================================
   # PHYSICAL MODELS - Codex Family
   # ==================================
-  # codex-auto: 无降级链 (Volces Ark 不支持 Codex 接口)
+  # auto-codex: 无降级链 (Volces Ark 不支持 Codex 接口)
   # 仅在虚拟入口定义，无 fallback
 
   # ==================================
   # PHYSICAL MODELS - Claude Family
   # ==================================
 
-  # claude-auto 的 fallback 链 (2层降级)
+  # auto-claude 的 fallback 链 (2层降级)
   # Level 2: Volces Ark API (最终降级)
-  - model_name: claude-auto
+  - model_name: auto-claude
     litellm_params:
-      model: "anthropic/glm-4.7"
-      api_base: "${ARK_CLAUDE_BASE}"
-      api_key: "${ARK_API_KEY}"
+      model: "glm-4.7"
+      api_base: os.environ/ARK_CLAUDE_BASE
+      api_key: os.environ/ARK_API_KEY
+      custom_llm_provider: "anthropic"
+    model_info:
+      fallback_order: 2
+      fallback_reason: "rate_limit"
+
+  # auto-claude-mini 的 fallback 链 (2层降级)
+  # Level 2: Volces Ark API (最终降级 - mini)
+  - model_name: auto-claude-mini
+    litellm_params:
+      model: "glm-4.7"
+      api_base: os.environ/ARK_CLAUDE_BASE
+      api_key: os.environ/ARK_API_KEY
       custom_llm_provider: "anthropic"
     model_info:
       fallback_order: 2
@@ -163,14 +200,14 @@ model_list:
   - model_name: "claude-*"
     litellm_params:
       model: "claude-*"  # 保留 claude 前缀
-      api_base: http://host.docker.internal:3000
+      api_base: os.environ/NEW_API_ANTHROPIC_BASE
       api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "anthropic"
 
   - model_name: "anthropic/*"
     litellm_params:
       model: "*"  # 保留 anthropic/ 前缀
-      api_base: http://host.docker.internal:3000
+      api_base: os.environ/NEW_API_ANTHROPIC_BASE
       api_key: os.environ/NEW_API_KEY
       custom_llm_provider: "anthropic"
 
@@ -178,7 +215,7 @@ model_list:
   - model_name: "*"
     litellm_params:
       model: "*"
-      api_base: http://host.docker.internal:3000/v1
+      api_base: os.environ/NEW_API_BASE
       api_key: os.environ/NEW_API_KEY
 
 # ==========================================
@@ -187,9 +224,12 @@ model_list:
 router_settings:
   # 模型组别名 (用于特殊路由场景)
   model_group_alias:
-    "chat-auto": "chat-auto"
-    "codex-auto": "codex-auto"
-    "claude-auto": "claude-auto"
+    "auto-chat": "auto-chat"
+    "auto-chat-mini": "auto-chat-mini"
+    "auto-codex": "auto-codex"
+    "auto-codex-mini": "auto-codex-mini"
+    "auto-claude": "auto-claude"
+    "auto-claude-mini": "auto-claude-mini"
 
   # Routing strategy - simple-shuffle 会按定义顺序尝试模型
   routing_strategy: "simple-shuffle"
@@ -207,7 +247,7 @@ router_settings:
 general_settings:
   # Master Key for Admin UI authentication AND API requests
   # 客户端统一使用这个 key，LiteLLM 自动转发到配置的后端
-  master_key: "${LITELLM_MASTER_KEY}"
+  master_key: os.environ/LITELLM_MASTER_KEY
 
   # Admin UI credentials (from env vars)
   ui_username: os.environ/UI_USERNAME
