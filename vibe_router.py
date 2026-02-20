@@ -119,6 +119,25 @@ class VibeIntelligentRouter(CustomLogger):
 
         return max(0, score)  # 确保非负
 
+    async def async_log_pre_api_call(
+        self,
+        model: str,
+        messages: List,
+        kwargs: Dict,
+    ):
+        """在 API 调用之前记录日志（用于测试 callback 系统）"""
+        try:
+            _log(f"[PRE_API_CALL] Model: {model}, kwargs model: {kwargs.get('model')}")
+            
+            # 检测是否是 auto-* 模型
+            request_model = kwargs.get('model', model)
+            if request_model and request_model.startswith('auto-'):
+                _log(f"[PRE_API_CALL] VIRTUAL MODEL detected: {request_model}")
+            else:
+                _log(f"[PRE_API_CALL] DIRECT MODEL detected: {request_model} → should forward to New API")
+        except Exception as e:
+            _log(f"Error in async_log_pre_api_call: {e}", "ERROR")
+
     async def async_pre_call_hook(
         self,
         user_api_key_dict: UserAPIKeyAuth,
@@ -144,6 +163,10 @@ class VibeIntelligentRouter(CustomLogger):
         5. 模型验证
         6. LiteLLM API 调用
 
+        路由策略：
+        - auto-* 模型: 使用配置的 fallback 链（CLIProxyAPI → New API → Ark）
+        - 非 auto-* 模型: 转发到 New API（通过配置文件的通配符规则）
+        
         ======================================================================
         🚧 NEXT PLAN: 自动复杂度判断路由（暂时禁用）
         ======================================================================
@@ -170,20 +193,26 @@ class VibeIntelligentRouter(CustomLogger):
             original_model = data.get("model")
             _log(f"Original model: {original_model}")
 
-            # ============================================================
-            # 🚧 COMPLEXITY-BASED ROUTING (DISABLED)
-            # ============================================================
-            # 当前直接透传，不做任何路由重写
-            # 用户需要明确选择：auto-chat（标准）或 auto-chat-mini（轻量）
-            _log(f"Routing: PASSTHROUGH (user choice: {original_model})")
-            
             # 添加元数据用于可观察性
             if "metadata" not in data:
                 data["metadata"] = {}
-            data["metadata"]["routing_mode"] = "manual_selection"
-            data["metadata"]["selected_model"] = original_model
 
-            # 直接返回原始请求，由 LiteLLM fallback 链处理
+            # ============================================================
+            # 路由决策：区分 auto-* 虚拟模型和直接模型请求
+            # ============================================================
+            if original_model and original_model.startswith("auto-"):
+                # auto-* 虚拟模型：使用 fallback 链
+                _log(f"Routing: VIRTUAL MODEL (fallback chain: {original_model})")
+                data["metadata"]["routing_mode"] = "virtual_model_fallback"
+                data["metadata"]["selected_model"] = original_model
+            else:
+                # 非 auto-* 模型：转发到 New API (通过配置文件的通配符)
+                _log(f"Routing: DIRECT MODEL → New API ({original_model})")
+                data["metadata"]["routing_mode"] = "passthrough_to_new_api"
+                data["metadata"]["selected_model"] = original_model
+                data["metadata"]["target_backend"] = "new-api"
+
+            # 直接返回原始请求，由 LiteLLM 配置文件路由规则处理
             return data
 
             # ============================================================

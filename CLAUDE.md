@@ -171,6 +171,8 @@ litellm_settings:
 | **Health Check Timeout** | Request times out after 15s | `/health` checks all backends, needs 30-45s timeout |
 | **Test Script 401** | Tests fail with wrong key | Ensure `tests/.env` has correct `LITELLM_MASTER_KEY` |
 | **Hardcoded Keys** | Scripts use wrong API key | Never hardcode keys, always use `${LITELLM_MASTER_KEY}` |
+| **Docker HTTPS/HTTP** | SSL record layer failure on New API | Docker 内部地址必须用 `http://`，不能用 `https://` |
+| **docker-compose restart 不刷新 env** | 修改 `.env` 后 restart 无效 | 必须 `docker-compose down && docker-compose up -d` 重建容器 |
 
 ### Critical Warnings
 
@@ -227,6 +229,31 @@ curl -H "Authorization: Bearer ${LITELLM_MASTER_KEY}" ...
 cd /path/to/liteLLM  # Ensure correct directory
 ./deploy.sh          # ✅ Correct
 ./test.sh            # ✅ Correct
+```
+
+**⚠️ Docker 内部地址必须用 HTTP**
+```bash
+# New API 在宿主机 port 3000，从 Docker 容器内访问：
+# ❌ Wrong - Docker 内部地址不支持 HTTPS，SSL 握手失败
+NEW_API_BASE=https://host.docker.internal:3000/v1
+NEW_API_ANTHROPIC_BASE=https://host.docker.internal:3000
+
+# ✅ Correct - 使用 HTTP
+NEW_API_BASE=http://host.docker.internal:3000/v1
+NEW_API_ANTHROPIC_BASE=http://host.docker.internal:3000
+
+# 如果需要 HTTPS，使用公网域名：
+NEW_API_BASE=https://api.bghunt.cn/v1
+NEW_API_ANTHROPIC_BASE=https://api.bghunt.cn
+```
+
+**⚠️ 修改 .env 后必须重建容器**
+```bash
+# ❌ Wrong - restart 不会重新读取 .env
+docker-compose restart litellm
+
+# ✅ Correct - down + up 重建容器才能加载新的环境变量
+docker-compose down litellm && docker-compose up -d litellm
 ```
 
 ---

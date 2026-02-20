@@ -253,6 +253,9 @@ general_settings:
   ui_username: os.environ/UI_USERNAME
   ui_password: os.environ/UI_PASSWORD
 
+  # Callbacks (required in BOTH general_settings AND litellm_settings)
+  callbacks: ["vibe_router.router_instance"]
+
 # ==========================================
 # 6. LITELLM SETTINGS
 # ==========================================
