@@ -6,31 +6,142 @@ Project documentation for LiteLLM Intelligent Router with 3-tier fallback strate
 
 ## Project Overview
 
-**Architecture**: LiteLLM Proxy + 3-Layer Fallback Strategy  
-**Tech Stack**: Python 3.9+, Docker, LiteLLM Proxy, Redis, PostgreSQL  
+**Architecture**: LiteLLM Proxy + 3-Layer Fallback Strategy
+**Tech Stack**: Python 3.9+, Docker, LiteLLM Proxy, Redis, PostgreSQL
+**Container Runtime**: Colima 0.10.1 (macOS Virtualization.Framework + virtiofs)
 **Core Feature**: Virtual models with manual selection + automatic fallback on failures
 
 **Current Status**:
-- ✅ **6 Virtual Models**: auto-chat, auto-chat-mini, auto-claude, auto-claude-mini, auto-codex, auto-codex-mini
+- ✅ **7 Virtual Models**: auto-chat, auto-chat-mini, auto-claude, auto-claude-max, auto-claude-mini, auto-codex, auto-codex-mini
 - ✅ **Manual Model Selection**: Users choose standard vs mini variants
-- ✅ **3-Layer Fallback**: CLIProxyAPI (OAuth) → New API → Volces Ark
+- ✅ **4-Layer Fallback**: CLIProxyAPI (OAuth) → New API → Zhipu → Volces Ark
 - 🚧 **Auto Complexity Routing**: Disabled (Next Plan - needs more testing and real-world data)
 
 ### Virtual Models & Fallback Strategy
 
 ```
 6 Virtual Models (All Configured):
-  ✅ auto-chat          (3 layers): Claude Sonnet 4-6 → gpt-5 → glm-4.7
-  ✅ auto-chat-mini     (3 layers): Gemini 2.5 Flash → gpt-5-mini → ark-code
-  ✅ auto-claude        (2 layers): Claude Sonnet 4-5 → glm-4.7
-  ✅ auto-claude-mini   (2 layers): Claude Haiku 4-5 → glm-4.7
+  ✅ auto-chat          (4 layers): gemini-3.1-pro-low → gpt-5 → glm-5 → kimi-k2.5
+  ✅ auto-chat-mini     (4 layers): gemini-2.5-flash → gpt-5-mini → glm-4.7 → ark-code-latest
+  ✅ auto-claude        (4 layers): claude-sonnet-4-6 → claude-sonnet-4-5 → glm-5 → glm-4.7
+  ✅ auto-claude-max    (4 layers): claude-opus-4-6 → claude-opus-4-5 → glm-5 → kimi-k2.5
+  ✅ auto-claude-mini   (3 layers): claude-haiku-4-5 → claude-haiku-4-5 → glm-4.7 → ark-code-latest
   ✅ auto-codex         (1 layer):  gpt-5.2-codex (New API only)
   ✅ auto-codex-mini    (1 layer):  gpt-5.1-codex-mini (New API only)
 
 Fallback Layers:
   L1: CLIProxyAPI (Antigravity OAuth) - Free tier with quota
   L2: New API (自建转发) - Unlimited usage
-  L3: Volces Ark (商业付费) - Paid fallback
+  L3: Zhipu API (智谱付费) - glm-5 / glm-4.7
+  L4: Volces Ark (最终降级) - kimi-k2.5 / glm-4.7 / ark-code-latest
+```
+
+---
+
+## Container Runtime: Colima
+
+**Container Runtime**: Colima (not Docker Desktop)
+- **Version**: 0.10.1
+- **Architecture**: aarch64 (Apple Silicon)
+- **Virtualization**: macOS Virtualization.Framework
+- **Mount Type**: virtiofs (high-performance file sharing)
+- **Docker Socket**: `unix:///Users/chenyi/.colima/default/docker.sock`
+
+### Colima Specific Issues
+
+**⚠️ File Mount Issue After Reboot**
+
+**Problem**: After system reboot, single-file bind mounts may become empty directories.
+
+**Symptoms**:
+```bash
+# File mount becomes directory
+-v ./config.yaml:/app/config.yaml:ro
+# Results in: /app/config.yaml is a directory (not a file)
+```
+
+**Root Cause**:
+- Colima's virtiofs mount cache inconsistency after reboot
+- Occurs when Colima VM is not properly synced with host filesystem
+
+**Solutions**:
+
+1. **Restart Colima (Recommended)**:
+```bash
+# Stop and restart Colima
+colima stop
+colima start
+
+# Or restart with specific resources
+colima start --cpu 4 --memory 8
+```
+
+2. **Use Directory Mounts Instead of File Mounts**:
+```yaml
+# ❌ Avoid single file mounts (unreliable after reboot)
+volumes:
+  - ./config.yaml:/app/config.yaml:ro
+
+# ✅ Use directory mounts (more reliable)
+volumes:
+  - ./config:/app/config:ro
+```
+
+3. **Embed Config in Image** (for CLIProxyAPI):
+```dockerfile
+# Copy config during build instead of mounting
+COPY config.yaml /app/config.yaml
+```
+
+4. **Force Colima VM Refresh**:
+```bash
+# Delete and recreate Colima VM (nuclear option)
+colima delete
+colima start
+```
+
+### Colima Commands
+
+```bash
+# Check Colima status
+colima status
+
+# Start Colima
+colima start
+
+# Stop Colima
+colima stop
+
+# Restart Colima
+colima restart
+
+# View Colima VM resources
+colima list
+
+# SSH into Colima VM (for debugging)
+colima ssh
+
+# Check Docker socket
+ls -la ~/.colima/default/docker.sock
+```
+
+### After System Reboot Checklist
+
+1. **Restart Colima**:
+```bash
+colima stop && colima start
+```
+
+2. **Restart Docker Containers**:
+```bash
+docker-compose down && docker-compose up -d
+```
+
+3. **Verify File Mounts**:
+```bash
+# Test if file mounts are working
+docker run --rm -v "$(pwd)/config_final.yaml:/test.yaml:ro" alpine ls -la /test.yaml
+# Should show: -rw-r--r-- ... /test.yaml (file, not directory)
 ```
 
 ---
@@ -70,22 +181,24 @@ docker logs litellm-vibe-router 2>&1 | grep "PASSTHROUGH\|Hook triggered"
 
 ```
 Client → LiteLLM (4000) → Virtual Model Selection (Manual)
-  ├─ auto-chat: Standard tasks (claude-sonnet-4-6) with 3-layer fallback
-  ├─ auto-chat-mini: Lightweight tasks (gemini-2.5-flash) with 3-layer fallback
-  ├─ auto-claude: Claude tasks (claude-sonnet-4-5) with 2-layer fallback
-  ├─ auto-claude-mini: Simple Claude (claude-haiku-4-5) with 2-layer fallback
+  ├─ auto-chat: Standard tasks (gemini-3.1-pro-low) with 4-layer fallback
+  ├─ auto-chat-mini: Lightweight tasks (gemini-2.5-flash) with 4-layer fallback
+  ├─ auto-claude: Claude tasks (claude-sonnet-4-6) with 4-layer fallback
+  ├─ auto-claude-max: Max Claude (claude-opus-4-6) with 4-layer fallback
+  ├─ auto-claude-mini: Simple Claude (claude-haiku-4-5) with 3-layer fallback
   ├─ auto-codex: Code tasks (gpt-5.2-codex) New API only
   └─ auto-codex-mini: Simple code (gpt-5.1-codex-mini) New API only
-    → Router → L1: CLIProxyAPI (OAuth) → L2: New API → L3: Ark API
+    → Router → L1: CLIProxyAPI → L2: New API → L3: Zhipu → L4: Volces Ark
 ```
 
 **Model Selection Guide**:
-- **auto-chat**: Complex reasoning, long context, multi-step tasks
-- **auto-chat-mini**: Simple queries, quick responses, Q&A
-- **auto-claude**: Deep analysis, creative writing, complex reasoning
-- **auto-claude-mini**: Simple tasks, quick responses, lightweight
-- **auto-codex**: Complex code generation, algorithms, refactoring
-- **auto-codex-mini**: Simple code snippets, syntax help, quick fixes
+- **auto-chat**: Standard Gemini model (gemini-3.1-pro-low) - most tasks
+- **auto-chat-mini**: Lightweight Gemini (gemini-2.5-flash) - simple queries, Q&A
+- **auto-claude**: Claude Sonnet - deep analysis, creative writing, complex reasoning
+- **auto-claude-max**: Claude Opus - maximum performance for most complex tasks
+- **auto-claude-mini**: Claude Haiku - simple tasks, quick responses
+- **auto-codex**: GPT Codex - complex code generation, algorithms, refactoring
+- **auto-codex-mini**: GPT Codex Mini - simple code snippets, syntax help
 
 ### Fallback Strategy (All Models)
 
@@ -173,6 +286,21 @@ litellm_settings:
 | **Hardcoded Keys** | Scripts use wrong API key | Never hardcode keys, always use `${LITELLM_MASTER_KEY}` |
 | **Docker HTTPS/HTTP** | SSL record layer failure on New API | Docker 内部地址必须用 `http://`，不能用 `https://` |
 | **docker-compose restart 不刷新 env** | 修改 `.env` 后 restart 无效 | 必须 `docker-compose down && docker-compose up -d` 重建容器 |
+| **Colima 文件挂载失败** | 重启后文件变目录 | 重启 Colima: `colima stop && colima start` |
+
+### Critical Warnings
+
+**⚠️ Colima File Mount Issue (Important!)**
+```bash
+# After system reboot, always restart Colima first
+colima stop && colima start
+
+# Then restart Docker containers
+docker-compose down && docker-compose up -d
+
+# Verify file mounts work
+docker run --rm -v "$(pwd)/config_final.yaml:/test.yaml:ro" alpine ls -la /test.yaml
+```
 
 ### Critical Warnings
 
@@ -292,6 +420,7 @@ docker-compose down litellm && docker-compose up -d litellm
 
 | Item | Value |
 |------|-------|
+| Container Runtime | Colima 0.10.1 (virtiofs) |
 | LiteLLM Port | 4000 |
 | CLIProxyAPI Port | 8317 |
 | Plugin Hook | `async_pre_call_hook` (must return data) |
@@ -301,8 +430,9 @@ docker-compose down litellm && docker-compose up -d litellm
 | Log Filter | `grep VIBE-ROUTER` or `grep "ROUTING DECISION"` |
 | Health Check | Requires auth, takes 30-45s |
 | Response.content | Can only be read **once** per request |
+| Colima Restart | `colima stop && colima start` (fix mount issues) |
 
-**Virtual Models**: `auto-chat`, `auto-chat-mini`, `auto-claude`, `auto-claude-mini`, `auto-codex`, `auto-codex-mini`  
+**Virtual Models**: `auto-chat`, `auto-chat-mini`, `auto-claude`, `auto-claude-max`, `auto-claude-mini`, `auto-codex`, `auto-codex-mini` (7 models)  
 **Backends**: CLIProxyAPI (OAuth) → New API (自建) → Volces Ark (付费)
 
 **Required Environment Variables**:

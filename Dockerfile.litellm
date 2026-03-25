@@ -1,0 +1,12 @@
+FROM ghcr.io/berriai/litellm:main-stable
+
+USER root
+
+# Copy configuration files into the image
+COPY config/litellm_config.yaml /app/litellm_config.yaml
+COPY config/vibe_router.py /app/vibe_router.py
+
+# Ensure proper permissions
+RUN chmod 644 /app/litellm_config.yaml /app/vibe_router.py
+
+USER 1000

@@ -1,6 +1,16 @@
-version: '3.8'
-
 services:
+  # ==================================
+  # New API (self-hosted forwarder)
+  # ==================================
+  new-api:
+    image: calciumion/new-api:latest
+    container_name: new-api
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./new-api/data:/data
+    restart: unless-stopped
+
   # ==================================
   # CLIProxyAPI (auto-chat dedicated API)
   # ==================================
@@ -13,7 +23,8 @@ services:
       - "8317:8317"
 
     volumes:
-      - ./cliproxyapi.config.yaml:/CLIProxyAPI/config.yaml:ro
+      # Config is now embedded in the image
+      # - ./cliproxyapi.config.yaml:/CLIProxyAPI/config.yaml:ro
       - cliproxy_auth:/cli-proxy-auth
 
     restart: unless-stopped
@@ -43,7 +54,9 @@ services:
   # LiteLLM Proxy with Intelligent Router
   # ==================================
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    build:
+      context: .
+      dockerfile: Dockerfile.litellm
     container_name: litellm-vibe-router
     user: root
 
@@ -55,9 +68,8 @@ services:
       - "4000:4000"
 
     volumes:
-      # Mount final config and router plugin
-      - ./config_final.yaml:/app/config.yaml:ro
-      - ./vibe_router.py:/app/vibe_router.py:ro
+      # Config files are embedded in the image (Colima virtiofs bug workaround)
+      # No file mounts - they become empty directories in Colima
 
       # Optional: mount test scripts for in-container testing
       - ./tests:/app/tests:ro
@@ -107,7 +119,7 @@ services:
 
     command:
       - "--config"
-      - "/app/config.yaml"
+      - "/app/litellm_config.yaml"
       - "--port"
       - "4000"
       - "--detailed_debug"
@@ -118,6 +130,8 @@ services:
       postgres:
         condition: service_healthy
       cliproxyapi:
+        condition: service_started
+      new-api:
         condition: service_started
 
     restart: unless-stopped
@@ -180,4 +194,4 @@ volumes:
 # ==================================
 networks:
   default:
-    name: litellm-network
+    name: litellm-vibe-network
