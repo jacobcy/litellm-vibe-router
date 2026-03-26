@@ -65,14 +65,14 @@ model_list:
   # Level 1: CLIProxyAPI (OAuth 计算资源 - Antigravity)
   - model_name: auto-chat
     litellm_params:
-      model: "gemini-3.1-pro-low"  # Antigravity Gemini 标准模型
+      model: "gemini-3.1-pro"  # Antigravity Gemini 标准模型
       api_base: http://cliproxyapi:8317/v1
       api_key: os.environ/CHAT_AUTO_API_KEY
       custom_llm_provider: "openai"
 
   - model_name: auto-chat-mini
     litellm_params:
-      model: "gemini-2.5-flash"  # Antigravity 轻量级模型
+      model: "gemini-3-flash"  # Antigravity 轻量级模型
       api_base: http://cliproxyapi:8317/v1
       api_key: os.environ/CHAT_AUTO_API_KEY
       custom_llm_provider: "openai"
