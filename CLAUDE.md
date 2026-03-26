@@ -20,12 +20,12 @@ Project documentation for LiteLLM Intelligent Router with 3-tier fallback strate
 ### Virtual Models & Fallback Strategy
 
 ```
-6 Virtual Models (All Configured):
-  ✅ auto-chat          (4 layers): gemini-3.1-pro-low → gpt-5 → glm-5 → kimi-k2.5
-  ✅ auto-chat-mini     (4 layers): gemini-2.5-flash → gpt-5-mini → glm-4.7 → ark-code-latest
+7 Virtual Models (All Configured):
+  ✅ auto-chat          (4 layers): gemini-3.1-pro → gpt-5 → glm-5 → kimi-k2.5
+  ✅ auto-chat-mini     (4 layers): gemini-3-flash → gpt-5-mini → glm-4.7 → ark-code-latest
   ✅ auto-claude        (4 layers): claude-sonnet-4-6 → claude-sonnet-4-5 → glm-5 → glm-4.7
   ✅ auto-claude-max    (4 layers): claude-opus-4-6 → claude-opus-4-5 → glm-5 → kimi-k2.5
-  ✅ auto-claude-mini   (3 layers): claude-haiku-4-5 → claude-haiku-4-5 → glm-4.7 → ark-code-latest
+  ✅ auto-claude-mini   (3 layers): claude-haiku-4-5 → glm-4.7 → ark-code-latest
   ✅ auto-codex         (1 layer):  gpt-5.2-codex (New API only)
   ✅ auto-codex-mini    (1 layer):  gpt-5.1-codex-mini (New API only)
 
@@ -151,11 +151,12 @@ docker run --rm -v "$(pwd)/config_final.yaml:/test.yaml:ro" alpine ls -la /test.
 ```bash
 # Deployment
 ./deploy.sh                           # Auto-deploy all services
-docker-compose restart litellm        # Restart after config changes
+./deploy.sh update --services litellm # Update and restart litellm only
+./deploy.sh update                    # Pull images and recreate all services
 
 # Testing
 ./test.sh                             # Run full test suite (auto-loads tests/.env)
-python3 tests/test_all_6_models.py    # Quick test all 6 models
+python3 tests/test_all_6_models.py    # Quick test all 7 models
 python3 tests/test_remote.py --url http://server:4000 --key sk-xxx
 
 # Manual test
@@ -181,8 +182,8 @@ docker logs litellm-vibe-router 2>&1 | grep "PASSTHROUGH\|Hook triggered"
 
 ```
 Client → LiteLLM (4000) → Virtual Model Selection (Manual)
-  ├─ auto-chat: Standard tasks (gemini-3.1-pro-low) with 4-layer fallback
-  ├─ auto-chat-mini: Lightweight tasks (gemini-2.5-flash) with 4-layer fallback
+  ├─ auto-chat: Standard tasks (gemini-3.1-pro) with 4-layer fallback
+  ├─ auto-chat-mini: Lightweight tasks (gemini-3-flash) with 4-layer fallback
   ├─ auto-claude: Claude tasks (claude-sonnet-4-6) with 4-layer fallback
   ├─ auto-claude-max: Max Claude (claude-opus-4-6) with 4-layer fallback
   ├─ auto-claude-mini: Simple Claude (claude-haiku-4-5) with 3-layer fallback
@@ -192,8 +193,8 @@ Client → LiteLLM (4000) → Virtual Model Selection (Manual)
 ```
 
 **Model Selection Guide**:
-- **auto-chat**: Standard Gemini model (gemini-3.1-pro-low) - most tasks
-- **auto-chat-mini**: Lightweight Gemini (gemini-2.5-flash) - simple queries, Q&A
+- **auto-chat**: Standard Gemini model (gemini-3.1-pro) - most tasks
+- **auto-chat-mini**: Lightweight Gemini (gemini-3-flash) - simple queries, Q&A
 - **auto-claude**: Claude Sonnet - deep analysis, creative writing, complex reasoning
 - **auto-claude-max**: Claude Opus - maximum performance for most complex tasks
 - **auto-claude-mini**: Claude Haiku - simple tasks, quick responses
@@ -204,20 +205,29 @@ Client → LiteLLM (4000) → Virtual Model Selection (Manual)
 
 ## Key Files
 
-**[vibe_router.py](vibe_router.py)** - Router plugin (metadata tracking only)
-- Currently in **passthrough mode** - no automatic routing
-- Adds metadata: `routing_mode: manual_selection`, `selected_model`
-- `async_pre_call_hook()` - **Returns data unmodified** (L118-160)
-- 🚧 **Next Plan**: Auto-complexity routing (commented out, L162-210)
+**[config/](config/)** - Configuration directory (embedded in Docker images)
+- `litellm_config.yaml` - LiteLLM configuration with virtual models and fallback chains
+- `vibe_router.py` - Router plugin (metadata tracking only)
+- `startup.sh` - Container startup script
+- ⚠️ Configs are embedded during `docker build` to avoid Colima virtiofs mount issues
 
-**[config_final.yaml](config_final.yaml)** - LiteLLM configuration
+**[config_final.yaml](config_final.yaml)** - Legacy LiteLLM configuration (for reference)
 - `model_list`: Virtual models + fallback chains with `fallback_order`
 - ⚠️ Use `os.environ/VAR` not `${VAR}` for API keys
 - ⚠️ Must add callbacks in BOTH `general_settings` AND `litellm_settings`
 
+**[vibe_router.py](vibe_router.py)** - Legacy router plugin (for reference)
+- Currently in **passthrough mode** - no automatic routing
+- Adds metadata: `routing_mode: manual_selection`, `selected_model`
+- `async_pre_call_hook()` - **Returns data unmodified**
+
 **[docker-compose.yml](docker-compose.yml)** - Services orchestration
+- Builds custom LiteLLM image from `Dockerfile.litellm`
 - Environment: `PYTHONPATH=/app` + `env_file: .env`
-- Volumes: Plugin mounted at `/app/vibe_router.py:ro`
+
+**[Dockerfile.litellm](Dockerfile.litellm)** - Custom LiteLLM image
+- Embeds `config/litellm_config.yaml` and `config/vibe_router.py`
+- Solves Colima virtiofs file mount bug after reboot
 
 **[.env](/.env)** - Secrets (gitignored)
 - `LITELLM_MASTER_KEY`, `UI_USERNAME`, `UI_PASSWORD`
@@ -257,10 +267,10 @@ litellm_settings:
 # L1: Use actual backend model
 - model_name: auto-chat
   litellm_params:
-    model: "claude-sonnet-4-6"  # Antigravity model
+    model: "gemini-3.1-pro"  # Antigravity Gemini model
     api_key: os.environ/CHAT_AUTO_API_KEY
 
-# L2-L3: Same model_name with fallback_order
+# L2-L4: Same model_name with fallback_order
 - model_name: auto-chat
   litellm_params:
     model: "gpt-5"
