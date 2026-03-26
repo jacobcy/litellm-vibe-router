@@ -35,3 +35,6 @@ config.yaml
 
 # Data
 new-api/data
+
+# Database backups
+backup/
