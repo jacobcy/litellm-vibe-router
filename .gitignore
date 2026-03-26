@@ -30,3 +30,8 @@ Thumbs.db
 .env.*
 !.env.example
 cliproxyapi.config.yaml
+cliproxyapi.config_final.yaml
+config.yaml
+
+# Data
+new-api/data

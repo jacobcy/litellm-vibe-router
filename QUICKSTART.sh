@@ -42,7 +42,10 @@ This implementation solves the following problems:
 
 Option 1: Automated Deployment (Recommended)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  $ ./deploy.sh
+  $ ./deploy.sh up
+
+  Upgrade all container apps:
+  $ ./deploy.sh update
 
 Option 2: Manual Deployment
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

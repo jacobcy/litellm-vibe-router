@@ -37,7 +37,9 @@ This project implements **intelligent model routing** for LiteLLM Proxy, enablin
 
 - Docker & Docker Compose
 - Python 3.9+ (for testing)
-- New API running on `localhost:3000`
+- `.env` configured in project root
+
+> `new-api` is now managed by this project and started by `docker-compose.yml`.
 
 ## 🚀 Quick Start
 
@@ -46,14 +48,32 @@ This project implements **intelligent model routing** for LiteLLM Proxy, enablin
 ```bash
 chmod +x deploy.sh QUICKSTART.sh
 git submodule update --init --recursive
-./deploy.sh
+./deploy.sh up
 ```
 
 This will:
-- Start LiteLLM proxy, PostgreSQL, and Redis
+- Start LiteLLM proxy, New API, PostgreSQL, and Redis
 - Start CLIProxyAPI for auto-chat isolation (port 8317)
 - Verify plugin loading
 - Check service health
+
+### 1.1 One-Click Script Usage
+
+```bash
+# Full stack start (default)
+./deploy.sh
+./deploy.sh up
+
+# Update all services (pull latest images + recreate)
+./deploy.sh update
+
+# Start only selected services
+./deploy.sh up --services litellm,new-api
+./deploy.sh update --services litellm
+
+# Show help
+./deploy.sh --help
+```
 
 ### 2. Test Routing
 
@@ -102,7 +122,8 @@ curl -X POST http://localhost:4000/v1/chat/completions \
 liteLLM/
 ├── vibe_router.py          # Main plugin implementation
 ├── config_final.yaml       # LiteLLM configuration
-├── docker-compose.yml      # Docker deployment (PostgreSQL, Redis, LiteLLM)
+├── docker-compose.yml      # Docker deployment (LiteLLM, New API, PostgreSQL, Redis, CLIProxyAPI)
+├── new-api/data/           # New API persistent data directory
 ├── CLIProxyAPI/            # Submodule: CLIProxyAPI service
 ├── cliproxyapi.config.yaml # CLIProxyAPI runtime config
 ├── deploy.sh               # Automated deployment script
@@ -193,6 +214,12 @@ auto-chat dedicated API:
 ```yaml
 CHAT_AUTO_API_BASE: http://cliproxyapi:8317/v1
 CHAT_AUTO_API_KEY: sk-auto-chat-proxy-12345678
+```
+
+New API local endpoint used by LiteLLM:
+```yaml
+NEW_API_BASE: http://host.docker.internal:3000/v1
+NEW_API_ANTHROPIC_BASE: http://host.docker.internal:3000
 ```
 
 ## 📊 Monitoring
