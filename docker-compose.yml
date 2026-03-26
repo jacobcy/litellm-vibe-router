@@ -8,7 +8,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./new-api/data:/data
+      - new_api_data:/data
     restart: unless-stopped
 
   # ==================================
@@ -187,6 +187,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  new_api_data:
     driver: local
 
 # ==================================
